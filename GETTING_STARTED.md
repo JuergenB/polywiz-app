@@ -155,18 +155,48 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 
 ---
 
-## Key API Keys (in .env.local)
+## Third-Party Services
 
-| Variable | Service | Purpose |
-|----------|---------|---------|
-| `LATE_API_KEY` | Zernio | Social media scheduling (currently: The Intersect profile) |
-| `AUTH_SECRET` | Auth.js | Session encryption |
-| `AUTH_USERS` | Auth.js | Pre-configured user credentials |
-| `FIRECRAWL_API_KEY` | Firecrawl | Web scraping and content extraction |
-| `PERPLEXITY_API_KEY` | Perplexity | Deep research for artist/content enrichment |
-| `OPENAI_API_KEY` | OpenAI | Post content generation (TBD) |
-| `AIRTABLE_API_KEY` | Airtable | Campaign data storage (TBD) |
-| `AIRTABLE_BASE_ID` | Airtable | Base identifier (TBD) |
+This project integrates with multiple external services. All API keys go in `.env.local` (see `.env.example` for the full template).
+
+### Core Services (Phase I)
+
+| Service | Purpose | Cost Model | Config |
+|---------|---------|-----------|--------|
+| **Zernio** | Social scheduling to 14 platforms | Plan-based (100-150 profiles available) | `LATE_API_KEY` |
+| **Auth.js** | Team login (Credentials provider) | Free (self-hosted) | `AUTH_SECRET`, `AUTH_USERS` |
+| **Airtable** | Campaign data, posts, brands, settings | Free tier / Plus | `AIRTABLE_API_KEY`, `AIRTABLE_BASE_ID` |
+| **Firecrawl** | Web scraping and content extraction | ~$0.01/page | `FIRECRAWL_API_KEY` |
+| **Perplexity** | Deep research (artist bios, context) | Plan-based | `PERPLEXITY_API_KEY` |
+| **OpenAI** | Content drafting (GPT-4.1) | Pay-per-use | `OPENAI_API_KEY` |
+
+### Analytics & Links (Phase II)
+
+| Service | Purpose | Cost Model | Config |
+|---------|---------|-----------|--------|
+| **Short.io** | Link shortening + click analytics | Plan-based | `SHORT_IO_API_KEY`, `SHORT_IO_DOMAIN` |
+| **LNK.bio** | Link-in-bio pages (Instagram profiles) | Plan-based | `LNKBIO_API_KEY` |
+
+### Visual Content (Phase III)
+
+| Service | Purpose | Cost Model | Config |
+|---------|---------|-----------|--------|
+| **Replicate** | Image generation (Flux Schnell/Dev) | Pay-per-use | `REPLICATE_API_TOKEN` |
+| **Blotato** | Carousel and visual content creation | TBD | `BLOTATO_API_KEY` |
+| **Orshot** | Instagram carousel templates | TBD | `ORSHOT_API_KEY` |
+
+### Hosting
+
+| Service | Purpose | Cost Model |
+|---------|---------|-----------|
+| **Vercel** | App hosting and deployment | Free tier / Pro |
+
+### Infrastructure Notes
+
+- All services are currently on Juergen's accounts. Cost charge-back to Arterial/NRA is TBD (see issue #16).
+- Each brand's Zernio API key is scoped to its profile — one key per brand.
+- Short.io may need custom short domains per brand (e.g., nra.link, artsville.link).
+- Short.io and Zernio both provide analytics — click tracking and post engagement respectively.
 
 ---
 
