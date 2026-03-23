@@ -1,0 +1,50 @@
+// This file is a placeholder pointer.
+// The full OpenAPI spec was provided as a conversation attachment.
+// Key details extracted below for quick reference.
+
+# Zernio API v1.0.1
+# Base URL: https://zernio.com/api
+# Auth: Bearer token (sk_ prefixed API key)
+
+# Core endpoints used by this project:
+#
+# POST /v1/posts — Create/schedule posts (supports 14 platforms, per-platform customContent, media, recycling)
+# GET  /v1/posts — List posts (filter by status, platform, profile, date range)
+# PUT  /v1/posts/{id} — Update draft/scheduled/failed posts
+# DELETE /v1/posts/{id} — Delete draft/scheduled posts
+#
+# POST /v1/media/presign — Get presigned upload URL (up to 5GB)
+#
+# GET  /v1/profiles — List profiles (brand containers)
+# GET  /v1/accounts — List connected social accounts
+# GET  /v1/accounts/health — Health check all accounts
+#
+# Queue system:
+# GET  /v1/queue/slots — List queue schedules
+# PUT  /v1/queue/slots — Create/update queue
+# GET  /v1/queue/preview — Preview upcoming slots
+# GET  /v1/queue/next-slot — Get next available slot
+#
+# Analytics:
+# GET  /v1/analytics — Post analytics
+# GET  /v1/analytics/best-time — Best posting times
+# GET  /v1/analytics/content-decay — Content lifespan data
+# GET  /v1/analytics/posting-frequency — Frequency vs engagement
+#
+# Validation:
+# POST /v1/tools/validate/post — Dry-run post validation
+# POST /v1/tools/validate/post-length — Character count per platform
+# POST /v1/tools/validate/media — Check media URL accessibility
+#
+# Webhooks:
+# Events: post.scheduled, post.published, post.failed, post.partial, post.recycled,
+#         account.connected, account.disconnected, message.received, comment.received
+#
+# Key features for campaign scheduling:
+# - Per-platform customContent and customMedia
+# - Per-platform scheduledFor overrides
+# - Recycling (auto-repost with content variations, weekly/monthly)
+# - Queue system with recurring time slots
+# - Bulk CSV upload
+#
+# Rate limits vary by plan (Free: 60/min, Build: 120/min, Accelerate: 600/min, Unlimited: 1200/min)
