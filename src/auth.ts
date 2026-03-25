@@ -3,6 +3,16 @@ import Credentials from "next-auth/providers/credentials"
 
 export type UserRole = "admin" | "curator" | "viewer"
 
+declare module "next-auth" {
+  interface User {
+    displayName?: string
+    role?: UserRole
+  }
+  interface Session {
+    user: User & { email?: string | null; name?: string | null; image?: string | null }
+  }
+}
+
 const users = (process.env.AUTH_USERS || "")
   .split(",")
   .filter(Boolean)
