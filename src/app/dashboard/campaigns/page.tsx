@@ -138,7 +138,7 @@ export default function CampaignsPage() {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+        <div className="grid gap-4 grid-cols-1 lg:grid-cols-2">
           {campaigns.map((campaign) => {
             const TypeIcon = CAMPAIGN_TYPE_ICONS[campaign.type] || Sparkles;
             const displayName =
@@ -159,77 +159,80 @@ export default function CampaignsPage() {
                 <Card
                   className="overflow-hidden !py-0 !gap-0 hover:shadow-md transition-shadow cursor-pointer"
                 >
-                  {/* Image header — flush with card top */}
-                  {campaign.imageUrl ? (
-                    <div className="h-28 overflow-hidden bg-muted">
-                      <img
-                        src={campaign.imageUrl}
-                        alt=""
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                  ) : (
-                    <div className="h-20 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-                      <TypeIcon className="h-8 w-8 text-muted-foreground/30" />
-                    </div>
-                  )}
+                  <div className="flex">
+                    {/* Image — left side, preserves aspect ratio */}
+                    {campaign.imageUrl ? (
+                      <div className="w-32 sm:w-40 shrink-0 overflow-hidden bg-muted">
+                        <img
+                          src={campaign.imageUrl}
+                          alt=""
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="w-32 sm:w-40 shrink-0 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+                        <TypeIcon className="h-8 w-8 text-muted-foreground/30" />
+                      </div>
+                    )}
 
-                  <div className="px-4 pt-2.5 pb-3 space-y-1.5">
-                    {/* Title + status */}
-                    <div className="flex items-start justify-between gap-2">
-                      <h3 className="font-semibold text-sm leading-tight line-clamp-2">
-                        {displayName}
-                      </h3>
-                      <Badge
-                        variant={STATUS_VARIANTS[campaign.status] || "secondary"}
-                        className="shrink-0 text-[11px]"
-                      >
-                        {campaign.status}
-                      </Badge>
-                    </div>
+                    {/* Content — right side */}
+                    <div className="flex-1 px-4 py-3 space-y-1.5 min-w-0">
+                      {/* Title + status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <h3 className="font-semibold text-sm leading-tight line-clamp-2">
+                          {displayName}
+                        </h3>
+                        <Badge
+                          variant={STATUS_VARIANTS[campaign.status] || "secondary"}
+                          className="shrink-0 text-[11px]"
+                        >
+                          {campaign.status}
+                        </Badge>
+                      </div>
 
-                    {/* Meta row */}
-                    <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                      <TypeIcon className="h-3 w-3" />
-                      <span>{campaign.type}</span>
-                      <span className="text-border">|</span>
-                      <span>{campaign.durationDays}d</span>
-                      {campaign.distributionBias && (
-                        <>
-                          <span className="text-border">|</span>
-                          <span>{campaign.distributionBias}</span>
-                        </>
+                      {/* Meta row */}
+                      <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                        <TypeIcon className="h-3 w-3" />
+                        <span>{campaign.type}</span>
+                        <span className="text-border">|</span>
+                        <span>{campaign.durationDays}d</span>
+                        {campaign.distributionBias && (
+                          <>
+                            <span className="text-border">|</span>
+                            <span>{campaign.distributionBias}</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Description / excerpt */}
+                      {campaign.description && (
+                        <p className="text-[11px] text-muted-foreground line-clamp-3">
+                          {campaign.description}
+                        </p>
                       )}
-                    </div>
 
-                    {/* Description / excerpt */}
-                    {campaign.description && (
-                      <p className="text-[11px] text-muted-foreground line-clamp-2">
-                        {campaign.description}
-                      </p>
-                    )}
+                      {/* Editorial direction preview */}
+                      {campaign.editorialDirection && (
+                        <p className="text-[11px] text-muted-foreground line-clamp-1 italic">
+                          &ldquo;{campaign.editorialDirection}&rdquo;
+                        </p>
+                      )}
 
-                    {/* Editorial direction preview */}
-                    {campaign.editorialDirection && (
-                      <p className="text-[11px] text-muted-foreground line-clamp-1 italic">
-                        &ldquo;{campaign.editorialDirection}&rdquo;
-                      </p>
-                    )}
-
-                    {/* Action label + source URL row */}
-                    <div className="flex items-center justify-between gap-2">
-                      <span
-                        className="text-[10px] text-muted-foreground/50 truncate max-w-[60%] inline-flex items-center gap-1"
-                      >
-                        {campaign.url.replace(/^https?:\/\//, "").slice(0, 50)}
-                        <ExternalLink className="h-2 w-2 shrink-0" />
-                      </span>
-                      {action && ActionIcon && (
-                        <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
-                          <ActionIcon className={`h-2.5 w-2.5 ${campaign.status === "Scraping" || campaign.status === "Generating" ? "animate-spin" : ""}`} />
-                          {action.label}
+                      {/* Action label + source URL row */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span
+                          className="text-[10px] text-muted-foreground/50 truncate max-w-[60%] inline-flex items-center gap-1"
+                        >
+                          {campaign.url.replace(/^https?:\/\//, "").slice(0, 50)}
+                          <ExternalLink className="h-2 w-2 shrink-0" />
                         </span>
-                      )}
+                        {action && ActionIcon && (
+                          <span className="text-[10px] font-medium text-primary inline-flex items-center gap-1 shrink-0">
+                            <ActionIcon className={`h-2.5 w-2.5 ${campaign.status === "Scraping" || campaign.status === "Generating" ? "animate-spin" : ""}`} />
+                            {action.label}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                 </Card>
