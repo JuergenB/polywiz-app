@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
-import { scrapeBlogPost, scrapeNewsletter } from "@/lib/firecrawl";
+import { scrapeBlogPost, scrapeNewsletter, type ContentSection } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
   SYSTEM_PROMPT,
@@ -94,10 +94,22 @@ function sendEvent(
 // ── Main Handler ───────────────────────────────────────────────────────
 
 export async function POST(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id: campaignId } = await params;
+
+  // Parse generation options from query params
+  const url = new URL(request.url);
+  const platformsParam = url.searchParams.get("platforms"); // comma-separated
+  const maxPerPlatformParam = url.searchParams.get("maxPerPlatform");
+
+  const selectedPlatforms = platformsParam
+    ? platformsParam.split(",").filter((p) => TARGET_PLATFORMS.includes(p))
+    : TARGET_PLATFORMS;
+  const maxPerPlatformOverride = maxPerPlatformParam
+    ? Math.max(1, Math.min(10, parseInt(maxPerPlatformParam, 10) || 0))
+    : null;
 
   // Create SSE stream
   const encoder = new TextEncoder();
@@ -166,16 +178,16 @@ export async function POST(
         // ── Step 3: Load platform settings ────────────────────────
         sendEvent(controller, encoder, {
           step: 3, totalSteps, status: "running",
-          message: `Loading platform settings (${TARGET_PLATFORMS.length} platforms)...`,
+          message: `Loading platform settings (${selectedPlatforms.length} platform${selectedPlatforms.length !== 1 ? "s" : ""})...`,
         });
 
         const platformRecords = await listRecords<Record<string, unknown>>("Platform Settings", {});
         const platformSettings = platformRecords.map((r) => r.fields as unknown as PlatformSetting);
-        const formattedSettings = formatPlatformSettings(platformSettings, TARGET_PLATFORMS);
+        const formattedSettings = formatPlatformSettings(platformSettings, selectedPlatforms);
 
         sendEvent(controller, encoder, {
           step: 3, totalSteps, status: "success",
-          message: `Loaded settings for: ${TARGET_PLATFORMS.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")}`,
+          message: `Loaded settings for: ${selectedPlatforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")}`,
         });
 
         // ── Step 4: Scrape blog post ──────────────────────────────
@@ -196,50 +208,62 @@ export async function POST(
           "Scraped Images": JSON.stringify(blogData.images),
         });
 
+        // Analyze sections for section-aware generation
+        const contentSections = blogData.sections?.filter((s: ContentSection) => !s.isPreamble) || [];
+        const isMultiSection = contentSections.length > 1;
+
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "success",
           message: `Scraped: "${blogData.title}"`,
-          detail: `Found ${blogData.images.length} images, ${blogData.content.length} chars of content`,
+          detail: isMultiSection
+            ? `Found ${blogData.images.length} images across ${contentSections.length} sections (${contentSections.map((s: ContentSection) => s.heading).join(", ")})`
+            : `Found ${blogData.images.length} images, ${blogData.content.length} chars of content`,
         });
 
         await sleep(DELAY_MS);
 
         // ── Step 5: Generate posts per platform with Claude ──────
-        // Use content-driven count: one variant per distinct image/section,
-        // with duration-based count as a minimum floor
         const durationBasedCount = getPostsPerPlatform(fields["Duration Days"] || 90);
         const config = resolveAnthropicConfig(brandForAnthropic);
         const allGeneratedPosts: import("@/lib/anthropic").GeneratedPost[] = [];
 
-        // Pre-assign images: each variant gets a different image (cycling)
+        // Deduplicate images for fallback
         const contentImages = blogData.images.filter((_img, idx) => {
-          // Skip duplicate hero images (index 0 and 1 are often the same)
           if (idx === 0) return true;
           return !blogData.images.slice(0, idx).some(
             (prev) => prev.url.split("?")[0] === blogData.images[idx].url.split("?")[0]
           );
         });
 
-        // Content-driven: use number of unique images as variant count
-        // (each image typically represents a distinct section/artist)
-        const postsPerPlatform = contentImages.length > 1
-          ? Math.max(contentImages.length, durationBasedCount)
-          : durationBasedCount;
+        // Section-aware variant count: one variant per section for multi-section,
+        // duration-based for single-section
+        const autoCount = isMultiSection
+          ? Math.max(contentSections.length, durationBasedCount)
+          : (contentImages.length > 1
+              ? Math.max(contentImages.length, durationBasedCount)
+              : durationBasedCount);
+        const postsPerPlatform = maxPerPlatformOverride
+          ? Math.min(maxPerPlatformOverride, autoCount)
+          : autoCount;
 
+        const testModeLabel = maxPerPlatformOverride ? ` (test mode: max ${maxPerPlatformOverride})` : "";
+        const sectionLabel = isMultiSection
+          ? `${contentSections.length} artist sections`
+          : `${contentImages.length} content images`;
         sendEvent(controller, encoder, {
           step: 5, totalSteps, status: "running",
-          message: `Detected ${contentImages.length} content sections — generating ${postsPerPlatform} variants per platform`,
+          message: `Detected ${sectionLabel} — generating ${postsPerPlatform} variants per platform${testModeLabel}`,
         });
 
         await sleep(1000);
 
-        for (let i = 0; i < TARGET_PLATFORMS.length; i++) {
-          const platform = TARGET_PLATFORMS[i];
+        for (let i = 0; i < selectedPlatforms.length; i++) {
+          const platform = selectedPlatforms[i];
           const platformName = platform.charAt(0).toUpperCase() + platform.slice(1);
 
           sendEvent(controller, encoder, {
             step: 5, totalSteps, status: "running",
-            message: `Generating ${postsPerPlatform} ${platformName} post${postsPerPlatform > 1 ? "s" : ""} (${i + 1}/${TARGET_PLATFORMS.length})...`,
+            message: `Generating ${postsPerPlatform} ${platformName} post${postsPerPlatform > 1 ? "s" : ""} (${i + 1}/${selectedPlatforms.length})...`,
             detail: `${allGeneratedPosts.length} posts generated so far`,
           });
 
@@ -255,12 +279,26 @@ export async function POST(
 
           const result = await generatePosts(SYSTEM_PROMPT, userPrompt, config);
 
-          // Force-assign the correct image + anchor for each variant
+          // ── Section-aware image assignment ──────────────────────
           for (let v = 0; v < result.posts.length; v++) {
-            const imgIdx = (i * postsPerPlatform + v) % contentImages.length;
-            const img = contentImages[imgIdx];
-            result.posts[v].imageUrl = img?.url || "";
-            result.posts[v].anchor = img?.anchor; // Newsletter story anchor
+            const post = result.posts[v];
+            const sectionIdx = post.sectionIndex ?? 0;
+
+            if (isMultiSection && sectionIdx > 0 && sectionIdx <= contentSections.length) {
+              // Use the image from the matching section
+              const section = contentSections[sectionIdx - 1];
+              const sectionImage = section.images[0];
+              post.imageUrl = sectionImage?.url || blogData.heroImage?.url || "";
+              post.anchor = undefined; // Blog posts don't use anchors
+            } else if (post.anchor) {
+              // Newsletter path: anchors already set by story extraction
+              // Keep existing anchor behavior
+            } else {
+              // Fallback: cycle through all images (single-section or missing sectionIndex)
+              const imgIdx = v % contentImages.length;
+              const img = contentImages[imgIdx];
+              post.imageUrl = img?.url || blogData.heroImage?.url || "";
+            }
           }
 
           allGeneratedPosts.push(...result.posts);
@@ -270,7 +308,7 @@ export async function POST(
 
         sendEvent(controller, encoder, {
           step: 5, totalSteps, status: "success",
-          message: `Generated ${allGeneratedPosts.length} posts across ${TARGET_PLATFORMS.length} platforms`,
+          message: `Generated ${allGeneratedPosts.length} posts across ${selectedPlatforms.length} platform${selectedPlatforms.length !== 1 ? "s" : ""}`,
         });
 
         // Use allGeneratedPosts as the result from here
@@ -367,7 +405,7 @@ export async function POST(
         sendEvent(controller, encoder, {
           step: totalSteps, totalSteps, status: "success",
           message: "Generation complete!",
-          detail: `${savedCount} posts across ${TARGET_PLATFORMS.length} platforms`,
+          detail: `${savedCount} posts across ${selectedPlatforms.length} platform${selectedPlatforms.length !== 1 ? "s" : ""}`,
         });
 
       } catch (error) {
