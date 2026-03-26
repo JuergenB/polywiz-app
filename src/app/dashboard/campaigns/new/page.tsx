@@ -51,6 +51,19 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
   Custom: Sparkles,
 };
 
+const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
+  Newsletter: "Promote a newsletter issue across social media. Each story becomes its own post with a link that scrolls directly to that story. Great for curated newsletters with multiple features.",
+  "Blog Post": "Turn a blog post or article into a series of social media posts. Images and key quotes are extracted and cycled through, with each post highlighting a different aspect of the article.",
+  Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Scrapes exhibition pages and artist profiles to build a months-long drip campaign. (Coming soon)",
+  "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms. (Coming soon)",
+  "Podcast Episode": "Promote a podcast episode using show notes, guest highlights, and key quotes. Can incorporate transcripts for deeper content extraction. (Coming soon)",
+  Event: "Promote open calls and submission deadlines. Time-sensitive campaigns that build toward a deadline, inviting artists to submit their work. (Coming soon)",
+  "Public Art": "Promote public art installations, murals, and outdoor exhibitions with location-specific content and visual storytelling. (Coming soon)",
+  "Video/Film": "Promote video content, short films, or video art with platform-optimized teasers and behind-the-scenes posts. (Coming soon)",
+  Institutional: "Promote organizational news, grants, residencies, and institutional announcements across social platforms. (Coming soon)",
+  Custom: "Create a custom campaign with manual configuration for content types not covered by other presets. (Coming soon)",
+};
+
 export default function NewCampaignPage() {
   const router = useRouter();
   const { currentBrand, brands, switchBrand } = useBrand();
@@ -254,55 +267,12 @@ export default function NewCampaignPage() {
         )}
       </Card>
 
-      {/* URL Input */}
+      {/* Campaign Type — first choice, determines everything else */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-base">Source URL</CardTitle>
+          <CardTitle className="text-base">What are you promoting?</CardTitle>
         </CardHeader>
-        <CardContent>
-          <Input
-            type="url"
-            placeholder={
-              currentBrand?.newsletterUrl
-                ? `${currentBrand.newsletterUrl}/...`
-                : "https://example.com/..."
-            }
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            className="text-base"
-          />
-          <p className="text-xs text-muted-foreground mt-2">
-            Paste a link to a newsletter, blog post, exhibition page, or any
-            content worth promoting.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Editorial Direction */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Editorial Direction</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="What should we emphasize? Which pieces stood out? What angle should the posts take?"
-            value={editorialDirection}
-            onChange={(e) => setEditorialDirection(e.target.value)}
-            rows={3}
-          />
-          <p className="text-xs text-muted-foreground mt-2">
-            Optional — this guidance shapes every post that gets generated. Your
-            perspective comes first.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Campaign Type */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">Campaign Type</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
             {CAMPAIGN_TYPES.map((t) => {
               const Icon = CAMPAIGN_TYPE_ICONS[t];
@@ -330,6 +300,72 @@ export default function NewCampaignPage() {
               );
             })}
           </div>
+          {/* Type description */}
+          {type && (
+            <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
+              {CAMPAIGN_TYPE_DESCRIPTIONS[type]}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* URL Input — context-aware based on type */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Source URL</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Input
+            type="url"
+            placeholder={
+              type === "Newsletter" && currentBrand?.newsletterUrl
+                ? `${currentBrand.newsletterUrl}/issues/...`
+                : type === "Newsletter"
+                  ? "https://yournewsletter.com/issues/..."
+                  : type === "Exhibition"
+                    ? "https://artworkarchive.com/.../exhibitions/..."
+                    : type === "Artist Profile"
+                      ? "https://example.com/artists/..."
+                      : type === "Podcast Episode"
+                        ? "https://example.com/podcast/episode-..."
+                        : "https://example.com/..."
+            }
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            className="text-base"
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            {type === "Newsletter"
+              ? "Paste the link to the specific newsletter issue. We\u2019ll extract each story and its images."
+              : type === "Blog Post"
+                ? "Paste the blog post URL. We\u2019ll extract the content, images, and key quotes."
+                : "Paste a link to the content you want to promote."}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* Editorial Direction */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Editorial Direction</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            placeholder={
+              type === "Newsletter"
+                ? "Which stories stood out this week? Any particular angle to emphasize?"
+                : type === "Blog Post"
+                  ? "What should we emphasize? What\u2019s the key takeaway for social media?"
+                  : "What should we emphasize? Which pieces stood out? What angle should the posts take?"
+            }
+            value={editorialDirection}
+            onChange={(e) => setEditorialDirection(e.target.value)}
+            rows={3}
+          />
+          <p className="text-xs text-muted-foreground mt-2">
+            Optional — this guidance shapes every post that gets generated. Your
+            perspective comes first.
+          </p>
         </CardContent>
       </Card>
 
