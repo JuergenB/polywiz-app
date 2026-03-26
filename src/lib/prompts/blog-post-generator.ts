@@ -5,7 +5,7 @@
  * Uses Claude Sonnet 4.6 with structured JSON output.
  */
 
-import type { ScrapedBlogData } from "@/lib/firecrawl";
+import type { ScrapedBlogData, ContentSection } from "@/lib/firecrawl";
 
 // ── System Prompt ──────────────────────────────────────────────────────
 
@@ -155,7 +155,6 @@ export function buildUserPrompt(params: UserPromptParams): string {
     platformSettings,
     platforms,
     postsPerPlatform,
-    imageCount,
   } = params;
 
   const totalPosts = platforms.length * postsPerPlatform;
@@ -163,12 +162,68 @@ export function buildUserPrompt(params: UserPromptParams): string {
     .map((p) => PLATFORM_TO_POST_TYPE[p] || p)
     .join(", ");
 
-  const angleInstructions = postsPerPlatform > 1
-    ? `For each platform, generate ${postsPerPlatform} unique variants. Each variant MUST focus on a DIFFERENT person, artist, topic, or section of the article. Do NOT write multiple posts about the same thing. Spread your focus across the entire article.\n\nSuggested approach:\n${CONTENT_ANGLES.slice(0, postsPerPlatform).map((a, i) => `  Variant ${i + 1}: ${a}`).join("\n")}`
-    : "Generate 1 post per platform, each optimized for that platform's format and audience.";
+  // Determine if this is a multi-section post (multiple artists/topics)
+  const contentSections = blogData.sections?.filter((s) => !s.isPreamble) || [];
+  const isMultiSection = contentSections.length > 1;
 
-  // Images are assigned externally after generation — tell Claude to focus on content variety
-  const imageInstructions = "IMPORTANT: Images will be assigned to posts automatically after generation. You do NOT need to pick images. Set imageUrl to an empty string. Focus on writing content that covers DIFFERENT parts of the article — if the article features multiple artists or topics, each variant should highlight a different one.";
+  // Build section-aware content and instructions
+  let contentBlock: string;
+  let angleInstructions: string;
+  let imageInstructions: string;
+
+  if (isMultiSection) {
+    // ── Multi-section mode: structured XML sections ──────────────
+    const preamble = blogData.sections?.find((s) => s.isPreamble);
+    const sectionXml = contentSections
+      .slice(0, 8) // Cap at 8 sections to avoid prompt bloat
+      .map((s, i) => {
+        const imgList = s.images.length > 0
+          ? `\nAvailable images: ${s.images.map((img) => `[${img.alt || "image"}](${img.url})`).join(", ")}`
+          : "";
+        return `<section index="${i + 1}" heading="${s.heading}">
+${s.content.slice(0, 1500)}${imgList}
+</section>`;
+      })
+      .join("\n\n");
+
+    contentBlock = `<blog_post_sections count="${contentSections.length}">
+<article_info>
+Title: ${blogData.title}
+Description: ${blogData.description}
+URL: ${blogData.url}
+${blogData.author ? `Author: ${blogData.author}` : ""}
+</article_info>
+
+${preamble?.content ? `<hero_content>\n${preamble.content.slice(0, 800)}\n</hero_content>\n\n` : ""}${sectionXml}
+</blog_post_sections>`;
+
+    angleInstructions = `This article has ${contentSections.length} distinct sections, each about a DIFFERENT artist/topic. Generate ${postsPerPlatform} variant${postsPerPlatform > 1 ? "s" : ""} per platform.
+
+CRITICAL SECTION RULE: Each variant MUST focus on the content from ONE specific section. In the JSON output, set "sectionIndex" to the section number (1-${contentSections.length}) that the variant is about. The sections are:
+${contentSections.slice(0, 8).map((s, i) => `  Section ${i + 1}: ${s.heading}`).join("\n")}
+
+Each variant must match its sectionIndex — do NOT write about "${contentSections[0]?.heading}" while setting sectionIndex to 2. The image assigned to each post will be determined by sectionIndex, so a mismatch means the wrong artist's artwork appears with the wrong artist's text.`;
+
+    imageInstructions = `IMPORTANT: Images are assigned AUTOMATICALLY based on sectionIndex. Set imageUrl to an empty string. The system will use the images from the section you specify. If you write about "${contentSections[0]?.heading}", set sectionIndex to 1 and the system will use ${contentSections[0]?.heading}'s images.`;
+
+  } else {
+    // ── Single-section mode: flat content (original behavior) ────
+    contentBlock = `<blog_post_content>
+Title: ${blogData.title}
+Description: ${blogData.description}
+URL: ${blogData.url}
+${blogData.author ? `Author: ${blogData.author}` : ""}
+
+Content:
+${blogData.content}
+</blog_post_content>`;
+
+    angleInstructions = postsPerPlatform > 1
+      ? `For each platform, generate ${postsPerPlatform} unique variants. Each variant MUST focus on a DIFFERENT person, artist, topic, or section of the article. Do NOT write multiple posts about the same thing. Spread your focus across the entire article.\n\nSuggested approach:\n${CONTENT_ANGLES.slice(0, postsPerPlatform).map((a, i) => `  Variant ${i + 1}: ${a}`).join("\n")}`
+      : "Generate 1 post per platform, each optimized for that platform's format and audience.";
+
+    imageInstructions = "IMPORTANT: Images will be assigned to posts automatically after generation. You do NOT need to pick images. Set imageUrl to an empty string. Focus on writing content that covers DIFFERENT parts of the article — if the article features multiple artists or topics, each variant should highlight a different one. Set sectionIndex to 0.";
+  }
 
   return `Generate ${totalPosts} social media posts (${postsPerPlatform} per platform) for the following blog post content.
 
@@ -189,15 +244,7 @@ ${brandVoice.voiceGuidelines}
 
 ${editorialDirection ? `<editorial_direction>\n${editorialDirection}\n</editorial_direction>` : ""}
 
-<blog_post_content>
-Title: ${blogData.title}
-Description: ${blogData.description}
-URL: ${blogData.url}
-${blogData.author ? `Author: ${blogData.author}` : ""}
-
-Content:
-${blogData.content}
-</blog_post_content>
+${contentBlock}
 
 ${imageInstructions}
 
@@ -223,12 +270,15 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
     {
       "platform": "instagram|twitter|linkedin|facebook|threads|bluesky|pinterest",
       "variant": 1,
+      "sectionIndex": 0,
       "postText": "The full post text including any hashtags",
-      "imageUrl": "URL of the assigned image or empty string",
+      "imageUrl": "",
       "linkUrl": "${blogData.url}"
     }
   ]
 }
+
+sectionIndex: Set to the section number (1-based) that this variant is about. Set to 0 if the post is about the article as a whole rather than a specific section.
 </output_format>
 
 CRITICAL REMINDERS (read these before generating):
@@ -237,6 +287,7 @@ CRITICAL REMINDERS (read these before generating):
 - Sound like a real person, not a marketing bot
 - Incorporate the brand voice naturally — don't force it
 - Include the link naturally where the platform supports it
+- sectionIndex MUST match the content — wrong index = wrong image paired with wrong artist
 - Return valid JSON only
 
 Generate ALL ${totalPosts} posts now.`;

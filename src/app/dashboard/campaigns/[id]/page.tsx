@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { PlatformIcon, PlatformBadge } from "@/components/shared/platform-icon";
 import { FrequencyPreview } from "@/components/campaigns/frequency-preview";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import type { Platform } from "@/lib/late-api";
 import {
@@ -69,6 +70,10 @@ import {
   Archive,
   Save,
   Trash2,
+  X,
+  Link2,
+  Maximize2,
+  RotateCcw,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -165,6 +170,11 @@ export default function CampaignDetailPage() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [progressLog, setProgressLog] = useState<ProgressEvent[]>([]);
+  const [showGenOptions, setShowGenOptions] = useState(false);
+  const [genPlatforms, setGenPlatforms] = useState<Set<string>>(
+    new Set(["instagram", "twitter", "linkedin", "facebook", "threads", "bluesky", "pinterest"])
+  );
+  const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null); // null = auto
   const queryClient = useQueryClient();
 
   const { data, isLoading, error } = useQuery<{ campaign: Campaign; posts: Post[] }>({
@@ -228,7 +238,15 @@ export default function CampaignDetailPage() {
     setProgressLog([]);
 
     try {
-      const res = await fetch(`/api/campaigns/${campaignId}/generate`, {
+      const genParams = new URLSearchParams();
+      if (genPlatforms.size < 7) {
+        genParams.set("platforms", Array.from(genPlatforms).join(","));
+      }
+      if (genMaxPerPlatform !== null) {
+        genParams.set("maxPerPlatform", String(genMaxPerPlatform));
+      }
+      const qs = genParams.toString();
+      const res = await fetch(`/api/campaigns/${campaignId}/generate${qs ? `?${qs}` : ""}`, {
         method: "POST",
       });
 
@@ -434,8 +452,8 @@ export default function CampaignDetailPage() {
             </p>
           )}
 
-          {/* Action button */}
-          <div className="pt-1">
+          {/* Action button + generation options toggle */}
+          <div className="pt-1 flex items-center gap-3">
             <CampaignActionButton
               status={isGenerating ? "Generating" : campaign.status}
               campaignId={campaign.id}
@@ -443,7 +461,75 @@ export default function CampaignDetailPage() {
               onGenerate={handleGenerate}
               isGenerating={isGenerating}
             />
+            {campaign.status === "Draft" && !isGenerating && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowGenOptions((v) => !v)}
+                className="text-xs text-muted-foreground"
+              >
+                {showGenOptions ? <ChevronUp className="h-3 w-3 mr-1" /> : <ChevronDown className="h-3 w-3 mr-1" />}
+                Options
+              </Button>
+            )}
           </div>
+
+          {/* Generation options — platform selection + test mode */}
+          {showGenOptions && campaign.status === "Draft" && !isGenerating && (
+            <div className="border rounded-lg p-4 space-y-4 bg-muted/30">
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+                  Platforms to generate
+                </Label>
+                <div className="flex flex-wrap gap-3">
+                  {(["instagram", "twitter", "linkedin", "facebook", "threads", "bluesky", "pinterest"] as const).map((p) => {
+                    const label = p === "twitter" ? "X/Twitter" : p.charAt(0).toUpperCase() + p.slice(1);
+                    return (
+                      <label key={p} className="flex items-center gap-1.5 cursor-pointer">
+                        <Switch
+                          checked={genPlatforms.has(p)}
+                          onCheckedChange={(checked) => {
+                            setGenPlatforms((prev) => {
+                              const next = new Set(prev);
+                              if (checked) next.add(p); else next.delete(p);
+                              return next;
+                            });
+                          }}
+                          className="scale-75"
+                        />
+                        <PlatformIcon platform={p} size="xs" showColor />
+                        <span className="text-xs">{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-medium text-muted-foreground mb-2 block">
+                  Max variants per platform
+                </Label>
+                <div className="flex items-center gap-2">
+                  {[1, 2, 3, 5, null].map((val) => (
+                    <Button
+                      key={val ?? "auto"}
+                      variant={genMaxPerPlatform === val ? "default" : "outline"}
+                      size="sm"
+                      className="h-7 text-xs px-2.5"
+                      onClick={() => setGenMaxPerPlatform(val)}
+                    >
+                      {val === null ? "Auto" : val}
+                    </Button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  {genMaxPerPlatform
+                    ? `Test mode: ${genMaxPerPlatform} variant${genMaxPerPlatform > 1 ? "s" : ""} per platform × ${genPlatforms.size} platform${genPlatforms.size !== 1 ? "s" : ""} = ~${genMaxPerPlatform * genPlatforms.size} posts`
+                    : `Auto: variant count based on content sections and campaign duration`}
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 
@@ -615,6 +701,15 @@ export default function CampaignDetailPage() {
             <CampaignSettingsReadOnly campaign={campaign} />
           )}
 
+          {/* Reset to Draft — for Review/Failed/Generating/Scraping campaigns */}
+          {["Review", "Failed", "Generating", "Scraping"].includes(campaign.status) && (
+            <ResetCampaignSection
+              campaignId={campaignId}
+              campaignName={campaign.name}
+              postCount={posts.length}
+            />
+          )}
+
           {/* Delete campaign — only for non-Active campaigns */}
           {campaign.status !== "Active" && (
             <DeleteCampaignSection
@@ -723,6 +818,7 @@ function CampaignPostRow({
   campaignStatus: CampaignStatus;
   onClick: () => void;
 }) {
+  const [thumbLightbox, setThumbLightbox] = useState(false);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const platformLower = toPlatformId(post.platform);
 
@@ -735,18 +831,44 @@ function CampaignPostRow({
       className="w-full text-left hover:bg-accent/50 transition-colors cursor-pointer"
     >
       <div className="px-4 py-3 flex items-start gap-3">
-        {/* Image thumbnail */}
+        {/* Image thumbnail — click to preview full image */}
         {post.imageUrl ? (
-          <div className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-muted">
+          <div
+            className="h-14 w-14 shrink-0 rounded-lg overflow-hidden bg-muted relative group cursor-zoom-in"
+            onClick={(e) => { e.stopPropagation(); setThumbLightbox(true); }}
+          >
             <img
               src={post.imageUrl}
               alt=""
               className="h-full w-full object-cover"
             />
+            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+              <Maximize2 className="h-3 w-3 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+            </div>
           </div>
         ) : (
           <div className="h-14 w-14 shrink-0 rounded-lg bg-muted flex items-center justify-center">
             <PlatformIcon platform={platformLower} size="md" showColor />
+          </div>
+        )}
+
+        {/* Thumbnail lightbox */}
+        {post.imageUrl && thumbLightbox && (
+          <div
+            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+            onClick={(e) => { e.stopPropagation(); setThumbLightbox(false); }}
+          >
+            <button
+              onClick={(e) => { e.stopPropagation(); setThumbLightbox(false); }}
+              className="absolute top-4 right-4 text-white/80 hover:text-white z-[101]"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={post.imageUrl}
+              alt=""
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-pointer"
+            />
           </div>
         )}
 
@@ -798,9 +920,13 @@ function PostDetailView({
   onClose: () => void;
   onNavigate: (post: Post) => void;
 }) {
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   const platformLower = toPlatformId(post.platform);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const charCount = post.content?.length || 0;
+
+  // The URL to the source article — prefer shortUrl, fall back to linkUrl
+  const articleUrl = post.shortUrl || post.linkUrl;
 
   // Navigation
   const currentIndex = posts.findIndex((p) => p.id === post.id);
@@ -857,16 +983,45 @@ function PostDetailView({
           </Badge>
         </div>
 
-        {/* Image */}
+        {/* Image — clickable to open full-size lightbox */}
         {post.imageUrl && (
           <div className="px-6 pb-3">
-            <div className="rounded-lg overflow-hidden bg-muted">
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => setLightboxOpen(true)}
+              onKeyDown={(e) => e.key === "Enter" && setLightboxOpen(true)}
+              className="rounded-lg overflow-hidden bg-muted relative group cursor-pointer"
+            >
               <img
                 src={post.imageUrl}
                 alt=""
                 className="w-full max-h-64 object-cover"
               />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+              </div>
             </div>
+          </div>
+        )}
+
+        {/* Image lightbox overlay */}
+        {post.imageUrl && lightboxOpen && (
+          <div
+            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
+            onClick={() => setLightboxOpen(false)}
+          >
+            <button
+              onClick={() => setLightboxOpen(false)}
+              className="absolute top-4 right-4 text-white/80 hover:text-white z-[101]"
+            >
+              <X className="h-6 w-6" />
+            </button>
+            <img
+              src={post.imageUrl}
+              alt=""
+              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl cursor-pointer"
+            />
           </div>
         )}
 
@@ -880,17 +1035,26 @@ function PostDetailView({
           </p>
         </div>
 
-        {/* Short link */}
-        {post.shortUrl && (
+        {/* Article link — launch the source URL in browser */}
+        {articleUrl && (
           <div className="px-6 pb-3">
             <a
-              href={post.shortUrl}
+              href={articleUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-primary hover:underline"
+              className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
             >
-              {post.shortUrl}
+              <Link2 className="h-3 w-3" />
+              Open source article
+              <ExternalLink className="h-3 w-3" />
             </a>
+          </div>
+        )}
+
+        {/* Short link (display only, separate from launch hint) */}
+        {post.shortUrl && (
+          <div className="px-6 pb-3">
+            <span className="text-xs text-muted-foreground">{post.shortUrl}</span>
           </div>
         )}
 
@@ -1245,6 +1409,90 @@ function CampaignSettingsReadOnly({ campaign }: { campaign: Campaign }) {
             </div>
           </>
         )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Reset campaign to Draft — deletes all posts, reverts status */
+function ResetCampaignSection({
+  campaignId,
+  campaignName,
+  postCount,
+}: {
+  campaignId: string;
+  campaignName: string;
+  postCount: number;
+}) {
+  const [isResetting, setIsResetting] = useState(false);
+  const queryClient = useQueryClient();
+
+  const handleReset = async () => {
+    setIsResetting(true);
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/reset`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to reset campaign");
+        setIsResetting(false);
+        return;
+      }
+      const data = await res.json();
+      toast.success(`Campaign reset to Draft — ${data.deletedPosts} posts deleted`);
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {
+      toast.error("Failed to reset campaign");
+    }
+    setIsResetting(false);
+  };
+
+  return (
+    <Card className="mt-6 border-amber-500/30">
+      <CardContent className="pt-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-medium text-amber-600 dark:text-amber-400">Reset to Draft</h3>
+            <p className="text-xs text-muted-foreground mt-1">
+              Delete {postCount > 0 ? `all ${postCount} generated posts and reset` : "reset"} this campaign to Draft status so you can regenerate with different settings.
+            </p>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={isResetting} className="border-amber-500/50 text-amber-600 hover:bg-amber-50 dark:text-amber-400 dark:hover:bg-amber-950">
+                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                Reset
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Reset Campaign to Draft</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This will reset &ldquo;{campaignName}&rdquo; to Draft status.
+                  {postCount > 0 && (
+                    <> All {postCount} generated posts will be permanently deleted.</>
+                  )}
+                  {" "}You can then adjust settings and regenerate.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={handleReset}
+                  className="bg-amber-600 text-white hover:bg-amber-700"
+                >
+                  {isResetting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : (
+                    <RotateCcw className="mr-2 h-4 w-4" />
+                  )}
+                  Reset to Draft
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
       </CardContent>
     </Card>
   );

@@ -31,15 +31,240 @@ export interface ScrapedImage {
   storyTitle?: string;
 }
 
+export interface ContentSection {
+  /** Heading text (e.g., "David Held") */
+  heading: string;
+  /** Heading level (2 for H2, 3 for H3) */
+  level: 2 | 3;
+  /** Markdown content for this section (excluding the heading itself) */
+  content: string;
+  /** Images that appear within this section's boundaries */
+  images: ScrapedImage[];
+  /** True for content that appears before the first heading */
+  isPreamble?: boolean;
+}
+
 export interface ScrapedBlogData {
   title: string;
   description: string;
   content: string;
   images: ScrapedImage[];
+  /** Structured sections parsed from H2/H3 headings — only present for multi-section posts */
+  sections: ContentSection[];
+  /** Post-level hero image (og:image or first image before any heading) */
+  heroImage: ScrapedImage | null;
   ogImage: string | null;
   author: string | null;
   publishDate: string | null;
   url: string;
+}
+
+// ── Image filtering ───────────────────────────────────────────────────
+
+/** Check if an image URL/alt represents a non-content element (nav, UI, decorative) */
+function isNonContentImage(url: string, alt: string): boolean {
+  const lowerUrl = url.toLowerCase();
+  const lowerAlt = alt.toLowerCase();
+
+  return (
+    // Tiny UI elements
+    lowerUrl.includes("favicon") ||
+    lowerUrl.includes("pixel") ||
+    lowerUrl.includes("tracking") ||
+    lowerUrl.includes("1x1") ||
+    lowerUrl.endsWith(".svg") ||
+    lowerUrl.endsWith(".gif") ||
+    // Specific small UI images (Curated.co permalink icons, etc.)
+    lowerUrl.includes("permalink.png") ||
+    lowerUrl.includes("spacer") ||
+    lowerUrl.includes("blank.") ||
+    // Branding/navigation
+    lowerUrl.includes("logo") ||
+    lowerUrl.includes("avatar") ||
+    lowerUrl.includes("gravatar") ||
+    lowerUrl.includes("profile-pic") ||
+    // Widgets and ads
+    lowerUrl.includes("widget") ||
+    lowerUrl.includes("banner-ad") ||
+    lowerUrl.includes("sponsor") ||
+    lowerUrl.includes("convertbox") ||
+    // Social share buttons
+    lowerUrl.includes("/share") ||
+    lowerUrl.includes("social-icon") ||
+    // Navigation / chrome elements
+    lowerUrl.includes("/icons/") ||
+    lowerUrl.includes("/ui/") ||
+    lowerUrl.includes("/nav/") ||
+    lowerUrl.includes("/buttons/") ||
+    lowerUrl.includes("/assets/icons/") ||
+    // Alt text signals for non-content images
+    lowerAlt === "logo" ||
+    lowerAlt === "icon" ||
+    lowerAlt === "avatar" ||
+    lowerAlt === "arrow" ||
+    lowerAlt === "chevron" ||
+    lowerAlt === "menu" ||
+    lowerAlt === "close" ||
+    lowerAlt === "search" ||
+    lowerAlt === "hamburger" ||
+    lowerAlt.includes("navigation") ||
+    lowerAlt.includes("nav icon") ||
+    lowerAlt.includes("button")
+  );
+}
+
+/** Extract images from a markdown string, filtering out non-content elements */
+function extractImagesFromMarkdown(markdown: string): ScrapedImage[] {
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  const allImages: ScrapedImage[] = [];
+  let match;
+
+  while ((match = imageRegex.exec(markdown)) !== null) {
+    const fullUrl = match[2];
+    const alt = match[1] || "";
+    if (isNonContentImage(fullUrl, alt)) continue;
+    allImages.push({ url: fullUrl, alt });
+  }
+
+  // Deduplicate by base URL (ignore query params / size variants)
+  const seen = new Set<string>();
+  const images: ScrapedImage[] = [];
+  for (const img of allImages) {
+    const key = img.url.split("?")[0];
+    if (!seen.has(key)) {
+      seen.add(key);
+      images.push(img);
+    }
+  }
+  return images;
+}
+
+// ── Section parsing ───────────────────────────────────────────────────
+
+/**
+ * Parse markdown into semantic sections delimited by H2/H3 headings.
+ *
+ * For multi-artist blog posts (e.g., Not Real Art), this ensures each
+ * artist's images stay bound to their section. The key rules:
+ *
+ * 1. Split at H2 boundaries (H3 creates sub-sections within an H2)
+ * 2. Content before the first heading is the preamble (hero/intro)
+ * 3. Images between headings belong to that section
+ * 4. If an image appears 1-2 lines before a heading, associate it with
+ *    the section below (common blog pattern: image above its heading)
+ */
+export function parseSections(markdown: string): ContentSection[] {
+  const lines = markdown.split("\n");
+  const sections: ContentSection[] = [];
+
+  let currentHeading = "";
+  let currentLevel: 2 | 3 = 2;
+  let currentLines: string[] = [];
+  let isPreamble = true;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const h2Match = line.match(/^## (.+)$/);
+    const h3Match = !h2Match ? line.match(/^### (.+)$/) : null;
+
+    if (h2Match || h3Match) {
+      // Flush previous section
+      const sectionContent = currentLines.join("\n").trim();
+      if (isPreamble) {
+        // Check if the last 1-2 lines before this heading are images
+        // If so, move them to the upcoming section (look-ahead rule)
+        const { content: preambleContent, movedImages } = extractTrailingImages(currentLines);
+        if (preambleContent || movedImages.length > 0) {
+          sections.push({
+            heading: "",
+            level: 2,
+            content: preambleContent,
+            images: extractImagesFromMarkdown(preambleContent),
+            isPreamble: true,
+          });
+        }
+        // Start the new section with any moved image lines
+        currentLines = movedImages;
+      } else if (sectionContent || currentLines.length > 0) {
+        // Check for trailing images that belong to the next section
+        const { content: secContent, movedImages } = extractTrailingImages(currentLines);
+        sections.push({
+          heading: currentHeading,
+          level: currentLevel,
+          content: secContent,
+          images: extractImagesFromMarkdown(secContent),
+        });
+        currentLines = movedImages;
+      }
+
+      currentHeading = (h2Match ? h2Match[1] : h3Match![1]).trim();
+      currentLevel = h2Match ? 2 : 3;
+      isPreamble = false;
+    } else {
+      currentLines.push(line);
+    }
+  }
+
+  // Flush final section
+  const finalContent = currentLines.join("\n").trim();
+  if (isPreamble && finalContent) {
+    // Entire document has no headings — single section
+    sections.push({
+      heading: "",
+      level: 2,
+      content: finalContent,
+      images: extractImagesFromMarkdown(finalContent),
+      isPreamble: true,
+    });
+  } else if (!isPreamble && (finalContent || currentLines.length > 0)) {
+    sections.push({
+      heading: currentHeading,
+      level: currentLevel,
+      content: finalContent,
+      images: extractImagesFromMarkdown(finalContent),
+    });
+  }
+
+  return sections;
+}
+
+/**
+ * Check if the last 1-2 lines of a section are image-only lines.
+ * If so, separate them — they likely belong to the next section
+ * (common pattern: image placed just above its heading).
+ */
+function extractTrailingImages(lines: string[]): {
+  content: string;
+  movedImages: string[];
+} {
+  const imageLineRegex = /^\s*!\[([^\]]*)\]\(([^)]+)\)\s*$/;
+  const movedImages: string[] = [];
+  let idx = lines.length - 1;
+
+  // Walk backwards through trailing blank lines
+  while (idx >= 0 && lines[idx].trim() === "") idx--;
+
+  // Check up to 2 trailing image lines
+  let imagesFound = 0;
+  while (idx >= 0 && imagesFound < 2) {
+    if (imageLineRegex.test(lines[idx])) {
+      movedImages.unshift(lines[idx]);
+      idx--;
+      imagesFound++;
+    } else {
+      break;
+    }
+    // Skip blank lines between images
+    while (idx >= 0 && lines[idx].trim() === "") idx--;
+  }
+
+  if (movedImages.length === 0) {
+    return { content: lines.join("\n").trim(), movedImages: [] };
+  }
+
+  // Content is everything up to (but not including) the moved images
+  const contentLines = lines.slice(0, idx + 1);
+  return { content: contentLines.join("\n").trim(), movedImages };
 }
 
 // ── Scraping ───────────────────────────────────────────────────────────
@@ -93,63 +318,8 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
   const metadata = page.metadata || {};
   const markdown = page.markdown || "";
 
-  // ── Image extraction — filter out UI/decorative images ────────────
-  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
-  const allImages: ScrapedImage[] = [];
-  let match;
-
-  while ((match = imageRegex.exec(markdown)) !== null) {
-    const fullUrl = match[2];
-    const alt = match[1] || "";
-    const lowerUrl = fullUrl.toLowerCase();
-    const lowerAlt = alt.toLowerCase();
-
-    // Skip known non-content image patterns
-    const isNonContent =
-      // Tiny UI elements
-      lowerUrl.includes("favicon") ||
-      lowerUrl.includes("pixel") ||
-      lowerUrl.includes("tracking") ||
-      lowerUrl.includes("1x1") ||
-      lowerUrl.endsWith(".svg") ||
-      lowerUrl.endsWith(".gif") ||
-      // Specific small UI images (Curated.co permalink icons, etc.)
-      lowerUrl.includes("permalink.png") ||
-      lowerUrl.includes("spacer") ||
-      lowerUrl.includes("blank.") ||
-      // Branding/navigation
-      lowerUrl.includes("logo") ||
-      lowerUrl.includes("avatar") ||
-      lowerUrl.includes("gravatar") ||
-      lowerUrl.includes("profile-pic") ||
-      // Widgets and ads
-      lowerUrl.includes("widget") ||
-      lowerUrl.includes("banner-ad") ||
-      lowerUrl.includes("sponsor") ||
-      lowerUrl.includes("convertbox") ||
-      // Social share buttons
-      lowerUrl.includes("/share") ||
-      lowerUrl.includes("social-icon") ||
-      // Alt text signals
-      lowerAlt === "logo" ||
-      lowerAlt === "icon" ||
-      lowerAlt === "avatar";
-
-    if (isNonContent) continue;
-
-    allImages.push({ url: fullUrl, alt });
-  }
-
-  // Deduplicate by base URL (ignore query params / size variants)
-  const seen = new Set<string>();
-  const images: ScrapedImage[] = [];
-  for (const img of allImages) {
-    const key = img.url.split("?")[0];
-    if (!seen.has(key)) {
-      seen.add(key);
-      images.push(img);
-    }
-  }
+  // ── Image extraction using shared utility ──────────────────────────
+  const images = extractImagesFromMarkdown(markdown);
 
   // Add og:image as featured image if not already in the list
   const ogImage = metadata.ogImage || metadata["og:image"] || null;
@@ -157,16 +327,30 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
     images.unshift({ url: ogImage, alt: metadata.ogTitle || metadata.title || "" });
   }
 
-  // Truncate content for prompt efficiency
-  const truncatedContent = markdown.length > 4000
-    ? markdown.slice(0, 4000) + "\n\n[Content truncated for generation...]"
+  // ── Parse into semantic sections ───────────────────────────────────
+  // For multi-artist posts, increase content limit so sections aren't truncated
+  const sections = parseSections(markdown);
+  const isMultiSection = sections.filter((s) => !s.isPreamble).length > 1;
+
+  // Increase limit for multi-section posts so each section gets representation
+  const contentLimit = isMultiSection ? 8000 : 4000;
+  const truncatedContent = markdown.length > contentLimit
+    ? markdown.slice(0, contentLimit) + "\n\n[Content truncated for generation...]"
     : markdown;
+
+  // Hero image: first image from preamble, or og:image, or first image overall
+  const preamble = sections.find((s) => s.isPreamble);
+  const heroImage = preamble?.images[0]
+    || (ogImage ? { url: ogImage, alt: metadata.ogTitle || metadata.title || "" } : null)
+    || images[0] || null;
 
   return {
     title: metadata.title || metadata.ogTitle || metadata["og:title"] || "",
     description: metadata.description || metadata.ogDescription || metadata["og:description"] || "",
     content: truncatedContent,
     images,
+    sections,
+    heroImage,
     ogImage,
     author: metadata.author || null,
     publishDate: metadata.publishedTime || metadata.articlePublishedTime || null,
@@ -309,11 +493,19 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
   // Strip #start or other fragments from the base URL for clean anchor links
   const baseUrl = url.split("#")[0];
 
+  // Newsletters use story-level extraction (anchor/storyTitle on each image),
+  // not heading-based sectioning. Return empty sections array.
+  const heroImage = ogImage
+    ? { url: ogImage, alt: metadata.ogTitle || metadata.title || "" }
+    : images[0] || null;
+
   return {
     title: metadata.title || metadata.ogTitle || metadata["og:title"] || "",
     description: metadata.description || metadata.ogDescription || metadata["og:description"] || "",
     content: truncatedContent,
     images,
+    sections: [],
+    heroImage,
     ogImage,
     author: metadata.author || null,
     publishDate: metadata.publishedTime || metadata.articlePublishedTime || null,

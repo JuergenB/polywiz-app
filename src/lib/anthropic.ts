@@ -119,4 +119,6 @@ export interface GeneratedPost {
   linkUrl: string;
   /** Newsletter story anchor fragment (e.g., "VSObpak") */
   anchor?: string;
+  /** Section index (1-based) for multi-section blog posts. 0 = whole article. */
+  sectionIndex?: number;
 }
