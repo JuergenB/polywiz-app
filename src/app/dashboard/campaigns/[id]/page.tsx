@@ -1157,54 +1157,56 @@ function PostDetailView({
   const nextPost = currentIndex < posts.length - 1 ? posts[currentIndex + 1] : null;
 
   return (
-    <div className="flex flex-col max-h-[90vh]">
-      {/* Navigation header — pinned, with right padding to avoid close button */}
-      <div className="flex items-center justify-between border-b border-border pl-6 pr-14 py-3 shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={!prevPost}
-          onClick={() => prevPost && onNavigate(prevPost)}
-          className="h-8"
-        >
-          <ArrowLeft className="h-3.5 w-3.5 mr-1" />
-          Prev
-        </Button>
-        <span className="text-xs text-muted-foreground">
-          {currentIndex + 1} of {posts.length}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          disabled={!nextPost}
-          onClick={() => nextPost && onNavigate(nextPost)}
-          className="h-8"
-        >
-          Next
-          <ArrowLeft className="h-3.5 w-3.5 ml-1 rotate-180" />
-        </Button>
+    <div className="flex flex-col max-h-[90vh] relative">
+      {/* Sticky header — platform + navigation combined */}
+      <div className="border-b border-border shrink-0 pr-10">
+        <div className="flex items-center gap-2 px-4 py-2.5">
+          {/* Prev */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            disabled={!prevPost}
+            onClick={() => prevPost && onNavigate(prevPost)}
+          >
+            <ArrowLeft className="h-3.5 w-3.5" />
+          </Button>
+
+          {/* Platform + status — center */}
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <PlatformBadge platform={platformLower} className="h-7 w-7 shrink-0" />
+            <span className="font-medium text-sm truncate">{post.platform}</span>
+            <Badge
+              variant={statusConfig.variant}
+              className={cn("text-[10px] px-1.5 py-0 shrink-0", statusConfig.className)}
+            >
+              {post.status}
+            </Badge>
+            {post.scheduledDate && (
+              <span className="text-[11px] text-muted-foreground shrink-0 hidden sm:inline">
+                {format(parseISO(post.scheduledDate), "MMM d, h:mm a")}
+              </span>
+            )}
+          </div>
+
+          {/* Counter + Next */}
+          <span className="text-[11px] text-muted-foreground shrink-0">
+            {currentIndex + 1}/{posts.length}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0"
+            disabled={!nextPost}
+            onClick={() => nextPost && onNavigate(nextPost)}
+          >
+            <ArrowLeft className="h-3.5 w-3.5 rotate-180" />
+          </Button>
+        </div>
       </div>
 
       {/* Scrollable content area */}
       <div className="flex-1 overflow-y-auto min-h-0">
-        {/* Platform header */}
-        <div className="flex items-center gap-3 px-6 pt-4 pb-3">
-          <PlatformBadge platform={platformLower} className="h-10 w-10" />
-          <div className="flex-1">
-            <h3 className="font-semibold text-base">{post.platform} Post</h3>
-            {post.scheduledDate && (
-              <p className="text-sm text-muted-foreground">
-                {format(parseISO(post.scheduledDate), "MMM d, yyyy 'at' h:mm a")}
-              </p>
-            )}
-          </div>
-          <Badge
-            variant={statusConfig.variant}
-            className={cn("text-xs", statusConfig.className)}
-          >
-            {post.status}
-          </Badge>
-        </div>
 
         {/* Image gallery — multi-image with add/remove/reorder for carousels */}
         <div className="px-6 pb-3 space-y-2">
@@ -1392,50 +1394,7 @@ function PostDetailView({
         </div>
 
         {/* Image lightbox overlay with navigation */}
-        {mediaImages.length > 0 && lightboxOpen && (
-          <div
-            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center p-4"
-            onClick={() => setLightboxOpen(false)}
-          >
-            <button
-              onClick={() => setLightboxOpen(false)}
-              className="absolute top-4 right-4 text-white/80 hover:text-white z-[101]"
-            >
-              <X className="h-6 w-6" />
-            </button>
-            {mediaImages.length > 1 && (
-              <>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
-                  }}
-                  className="absolute left-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white z-[101]"
-                >
-                  <ArrowLeft className="h-8 w-8" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
-                  }}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-white/80 hover:text-white z-[101]"
-                >
-                  <ArrowLeft className="h-8 w-8 rotate-180" />
-                </button>
-                <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white/80 text-sm z-[101]">
-                  {lightboxIndex + 1} / {mediaImages.length}
-                </span>
-              </>
-            )}
-            <img
-              src={mediaImages[lightboxIndex]}
-              alt=""
-              className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl"
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
-        )}
+        {/* Lightbox placeholder — actual lightbox rendered below, outside scroll area */}
 
         {/* Full content — editable */}
         <div className="px-6 pb-3">
@@ -1532,6 +1491,57 @@ function PostDetailView({
           )}
         </div>
       </div>
+
+      {/* Image lightbox — inside dialog but outside scroll area */}
+      {mediaImages.length > 0 && lightboxOpen && (
+        <div
+          className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center rounded-lg"
+          onClick={() => setLightboxOpen(false)}
+        >
+          {/* Close */}
+          <button
+            onClick={() => setLightboxOpen(false)}
+            className="absolute top-3 right-3 text-white/70 hover:text-white bg-black/40 rounded-full p-1.5"
+          >
+            <X className="h-4 w-4" />
+          </button>
+
+          {/* Nav arrows */}
+          {mediaImages.length > 1 && (
+            <>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
+                }}
+                className="absolute left-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5" />
+              </button>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-black/50 hover:bg-black/70 text-white rounded-full p-2 transition-colors"
+              >
+                <ArrowLeft className="h-5 w-5 rotate-180" />
+              </button>
+              <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm font-medium bg-black/50 px-3 py-1 rounded-full">
+                {lightboxIndex + 1} / {mediaImages.length}
+              </span>
+            </>
+          )}
+
+          {/* Image */}
+          <img
+            src={mediaImages[lightboxIndex]}
+            alt=""
+            className="max-w-[90%] max-h-[80%] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
 
       {/* Footer actions — pinned */}
       <div className="flex items-center justify-between border-t border-border px-6 py-4 shrink-0">
