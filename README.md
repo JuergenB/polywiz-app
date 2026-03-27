@@ -157,8 +157,11 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Post content inline editing (click to edit, save/cancel)
 - [x] **Phase I:** Multi-image carousel support (add/remove/reorder images per post)
 - [x] **Phase I:** Post image swap (drag-drop, paste URL, file upload)
-- [ ] **Phase I:** Post approve/dismiss actions
-- [ ] **Phase I:** Push approved posts to Zernio scheduler
+- [x] **Phase I:** Post approve/dismiss actions
+- [x] **Phase I:** Push approved posts to Zernio scheduler
+- [x] **Phase I:** Tapering schedule algorithm with configurable duration & distribution bias
+- [x] **Phase I:** Batch scheduling with date collision avoidance
+- [x] **Phase I:** Post status alignment with Zernio lifecycle (Queued → Scheduled → Published)
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
