@@ -729,16 +729,18 @@ export default function CampaignDetailPage() {
                           `/api/campaigns/${campaignId}/publish`,
                           { method: "POST" }
                         );
-                        if (res.ok) {
-                          const data = await res.json();
-                          queryClient.invalidateQueries({ queryKey: ["campaign"] });
-                          if (data.failed > 0) {
-                            toast.error(`${data.published} published, ${data.failed} failed`);
-                          } else {
-                            toast.success(`${data.published} posts pushed to Zernio!`);
-                          }
+                        const data = await res.json();
+                        queryClient.invalidateQueries({ queryKey: ["campaign"] });
+                        if (!res.ok) {
+                          toast.error(data.error || "Failed to publish to Zernio");
+                        } else if (data.failed > 0) {
+                          const errors = data.results
+                            ?.filter((r: { success: boolean }) => !r.success)
+                            .map((r: { platform: string; error: string }) => `${r.platform}: ${r.error}`)
+                            .join("\n");
+                          toast.error(`${data.published} published, ${data.failed} failed:\n${errors}`, { duration: 10000 });
                         } else {
-                          toast.error("Failed to publish to Zernio");
+                          toast.success(`${data.published} posts pushed to Zernio!`);
                         }
                       }}
                     >
