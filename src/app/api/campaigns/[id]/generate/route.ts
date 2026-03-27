@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { getCampaignTypeRule, getGenerationRules } from "@/lib/airtable/campaign-type-rules";
-import { scrapeBlogPost, scrapeNewsletter, type ContentSection } from "@/lib/firecrawl";
+import { scrapeBlogPost, scrapeNewsletter, scrapeEvent, scrapeSupplemental, type ContentSection, type ScrapedEventBlogData } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
   SYSTEM_PROMPT,
@@ -28,6 +28,11 @@ interface CampaignFields {
   "Scraped Content": string;
   "Scraped Images": string;
   Status: string;
+  "Event Date": string;
+  "Event Details": string;
+  "Additional URLs": string;
+  "Target Platforms": string;
+  "Max Variants Per Platform": number;
 }
 
 interface BrandFields {
@@ -240,16 +245,45 @@ export async function POST(
           message: `Loaded settings for: ${selectedPlatforms.map((p) => p.charAt(0).toUpperCase() + p.slice(1)).join(", ")}`,
         });
 
-        // ── Step 4: Scrape blog post ──────────────────────────────
+        // ── Step 4: Scrape content ──────────────────────────────
+        const isNewsletter = fields.Type === "Newsletter";
+        const isEventType = fields.Type === "Event" || fields.Type === "Open Call";
+
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "running",
-          message: `Scraping ${fields.Type === "Newsletter" ? "newsletter" : "blog post"} content...`,
+          message: `Scraping ${isEventType ? "event page" : isNewsletter ? "newsletter" : "blog post"} content...`,
         });
 
-        const isNewsletter = fields.Type === "Newsletter";
-        const blogData = isNewsletter
-          ? await scrapeNewsletter(fields.URL)
-          : await scrapeBlogPost(fields.URL);
+        const blogData = isEventType
+          ? await scrapeEvent(fields.URL)
+          : isNewsletter
+            ? await scrapeNewsletter(fields.URL)
+            : await scrapeBlogPost(fields.URL);
+
+        // Scrape additional URLs if present
+        let supplementalContent = "";
+        const additionalUrls = (fields["Additional URLs"] || "").split("\n").filter((u: string) => u.trim());
+        if (additionalUrls.length > 0) {
+          sendEvent(controller, encoder, {
+            step: 4, totalSteps, status: "running",
+            message: `Scraping ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}...`,
+          });
+
+          for (const addUrl of additionalUrls) {
+            try {
+              const supplemental = await scrapeSupplemental(addUrl.trim());
+              supplementalContent += `\n\n<source url="${addUrl.trim()}" title="${supplemental.title}">\n${supplemental.content}\n</source>`;
+              // Merge supplemental images
+              for (const img of supplemental.images) {
+                if (!blogData.images.some((existing) => existing.url.split("?")[0] === img.url.split("?")[0])) {
+                  blogData.images.push(img);
+                }
+              }
+            } catch (err) {
+              console.warn(`[generate] Failed to scrape supplemental URL ${addUrl}:`, err);
+            }
+          }
+        }
 
         // Store scraped data on campaign record
         await updateRecord("Campaigns", campaignId, {
@@ -262,12 +296,17 @@ export async function POST(
         const contentSections = blogData.sections?.filter((s: ContentSection) => !s.isPreamble) || [];
         const isMultiSection = contentSections.length > 1;
 
+        // Extract event data if available
+        const eventData = isEventType ? (blogData as ScrapedEventBlogData).eventData : null;
+
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "success",
-          message: `Scraped: "${blogData.title}"`,
-          detail: isMultiSection
-            ? `Found ${blogData.images.length} images across ${contentSections.length} sections (${contentSections.map((s: ContentSection) => s.heading).join(", ")})`
-            : `Found ${blogData.images.length} images, ${blogData.content.length} chars of content`,
+          message: `Scraped: "${blogData.title}"${additionalUrls.length > 0 ? ` + ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}` : ""}`,
+          detail: isEventType && eventData
+            ? `Extracted event details: ${Object.entries(eventData).filter(([, v]) => v).map(([k]) => k).join(", ")}`
+            : isMultiSection
+              ? `Found ${blogData.images.length} images across ${contentSections.length} sections (${contentSections.map((s: ContentSection) => s.heading).join(", ")})`
+              : `Found ${blogData.images.length} images, ${blogData.content.length} chars of content`,
         });
 
         await sleep(DELAY_MS);
@@ -333,6 +372,10 @@ export async function POST(
                 postsPerPlatform,
                 imageCount: contentImages.length,
                 campaignTypeRule,
+                eventDate: fields["Event Date"] || null,
+                eventDetails: fields["Event Details"] || null,
+                supplementalContent: supplementalContent || null,
+                eventData: eventData as Record<string, string | null> | null,
               })
             : buildUserPrompt({
                 blogData,

@@ -369,6 +369,175 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
  * This extracts images with their story anchors so short links
  * can point to the specific story: newsletter-url#ANCHOR
  */
+/**
+ * Scrape an event/open call URL using Firecrawl JSON extraction.
+ *
+ * Attempts structured extraction (title, dates, venue, eligibility, etc.)
+ * with a markdown fallback. Returns ScrapedBlogData with event-specific
+ * structured data stored in the `eventData` field.
+ */
+export interface ScrapedEventData {
+  title: string | null;
+  organization: string | null;
+  description: string | null;
+  eventDate: string | null;
+  eventTime: string | null;
+  endDate: string | null;
+  venue: string | null;
+  location: string | null;
+  ticketUrl: string | null;
+  price: string | null;
+  theme: string | null;
+  eligibility: string | null;
+  submissionDeadline: string | null;
+  submissionUrl: string | null;
+}
+
+export interface ScrapedEventBlogData extends ScrapedBlogData {
+  eventData: ScrapedEventData | null;
+}
+
+export async function scrapeEvent(url: string): Promise<ScrapedEventBlogData> {
+  const apiKey = getApiKey();
+
+  // Try JSON extraction first (5 credits)
+  let eventData: ScrapedEventData | null = null;
+  try {
+    const jsonRes = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        url,
+        formats: ["json", "markdown"],
+        jsonOptions: {
+          schema: {
+            type: "object",
+            properties: {
+              title: { type: "string" },
+              organization: { type: "string" },
+              description: { type: "string" },
+              eventDate: { type: "string" },
+              eventTime: { type: "string" },
+              endDate: { type: "string" },
+              venue: { type: "string" },
+              location: { type: "string" },
+              ticketUrl: { type: "string" },
+              price: { type: "string" },
+              theme: { type: "string" },
+              eligibility: { type: "string" },
+              submissionDeadline: { type: "string" },
+              submissionUrl: { type: "string" },
+            },
+          },
+          prompt: "Extract event details: title, hosting organization, description, event date, event time, end date, venue name, full location/address, ticket or RSVP URL, price/cost, theme, eligibility requirements, submission deadline, and submission URL.",
+        },
+        onlyMainContent: false,
+        excludeTags: [
+          "nav", "footer", "header",
+          ".sidebar", ".widget", ".ad", ".popup",
+          "script", "style", "iframe",
+        ],
+        waitFor: 3000,
+      }),
+    });
+
+    if (jsonRes.ok) {
+      const jsonData = await jsonRes.json();
+      const extracted = jsonData?.data?.json;
+      if (extracted && typeof extracted === "object") {
+        eventData = extracted as ScrapedEventData;
+      }
+
+      // Also get the markdown + metadata from the same response
+      const page = jsonData?.data;
+      if (page?.markdown) {
+        const metadata = page.metadata || {};
+        const markdown = page.markdown || "";
+        const images = extractImagesFromMarkdown(markdown);
+        const ogImage = metadata.ogImage || metadata["og:image"] || null;
+
+        if (ogImage && !images.some((img) => img.url.split("?")[0] === ogImage.split("?")[0])) {
+          images.unshift({ url: ogImage, alt: metadata.ogTitle || metadata.title || "" });
+        }
+
+        const truncatedContent = markdown.length > 6000
+          ? markdown.slice(0, 6000) + "\n\n[Content truncated for generation...]"
+          : markdown;
+
+        const heroImage = ogImage
+          ? { url: ogImage, alt: metadata.ogTitle || metadata.title || "" }
+          : images[0] || null;
+
+        return {
+          title: eventData?.title || metadata.title || metadata.ogTitle || "",
+          description: eventData?.description || metadata.description || "",
+          content: truncatedContent,
+          images,
+          sections: [],
+          heroImage,
+          ogImage,
+          author: null,
+          publishDate: null,
+          url,
+          eventData,
+        };
+      }
+    }
+  } catch (err) {
+    console.warn("[scrapeEvent] JSON extraction failed, falling back to markdown:", err);
+  }
+
+  // Fallback: plain markdown scrape (1 credit)
+  const blogData = await scrapeBlogPost(url);
+  return { ...blogData, eventData };
+}
+
+/**
+ * Scrape a supplemental URL for additional context (lightweight).
+ * Returns just the markdown content and images — no section parsing.
+ */
+export async function scrapeSupplemental(url: string): Promise<{ content: string; images: ScrapedImage[]; title: string }> {
+  const apiKey = getApiKey();
+
+  const res = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      url,
+      formats: ["markdown"],
+      onlyMainContent: true,
+      waitFor: 3000,
+    }),
+  });
+
+  if (!res.ok) {
+    console.warn(`[scrapeSupplemental] Failed to scrape ${url}: ${res.status}`);
+    return { content: "", images: [], title: url };
+  }
+
+  const data = await res.json();
+  const page = data?.data;
+  const markdown = page?.markdown || "";
+  const metadata = page?.metadata || {};
+  const images = extractImagesFromMarkdown(markdown);
+
+  const truncated = markdown.length > 3000
+    ? markdown.slice(0, 3000) + "\n\n[Content truncated...]"
+    : markdown;
+
+  return {
+    content: truncated,
+    images,
+    title: metadata.title || metadata.ogTitle || url,
+  };
+}
+
 export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
   const apiKey = getApiKey();
 

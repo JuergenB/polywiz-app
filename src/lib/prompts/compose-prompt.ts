@@ -109,6 +109,14 @@ function formatRulesAsXml(rules: GenerationRule[]): string {
 export interface ComposeUserPromptParams extends UserPromptParams {
   /** Campaign Type Rule record from Airtable (optional — falls back if absent) */
   campaignTypeRule?: CampaignTypeRule | null;
+  /** Event date or submission deadline (ISO date string) */
+  eventDate?: string | null;
+  /** User-supplied event details (location, tickets, RSVP, etc.) */
+  eventDetails?: string | null;
+  /** Content scraped from additional URLs */
+  supplementalContent?: string | null;
+  /** Structured event data from JSON extraction */
+  eventData?: Record<string, string | null> | null;
 }
 
 /**
@@ -118,35 +126,72 @@ export interface ComposeUserPromptParams extends UserPromptParams {
  * Falls back to the base buildUserPrompt() if no campaignTypeRule is provided.
  */
 export function composeUserPrompt(params: ComposeUserPromptParams): string {
-  const { campaignTypeRule, ...baseParams } = params;
+  const { campaignTypeRule, eventDate, eventDetails, supplementalContent, eventData, ...baseParams } = params;
 
   // Get the base user prompt
   const basePrompt = baseBuildUserPrompt(baseParams);
 
-  // If no campaign type rule, return as-is
-  if (!campaignTypeRule) {
+  // Build all context sections to inject
+  const contextSections: string[] = [];
+
+  // Type-specific context from CampaignTypeRule
+  const typeContext = campaignTypeRule ? buildTypeContext(campaignTypeRule) : null;
+  if (typeContext) contextSections.push(typeContext);
+
+  // Event/Open Call context
+  if (eventDate || eventDetails || eventData) {
+    const eventParts: string[] = [];
+
+    if (eventData) {
+      const fields = Object.entries(eventData)
+        .filter(([, v]) => v && v.trim())
+        .map(([k, v]) => `${k}: ${v}`);
+      if (fields.length > 0) {
+        eventParts.push(`<scraped_event_data>\n${fields.join("\n")}\n</scraped_event_data>`);
+      }
+    }
+
+    if (eventDetails) {
+      eventParts.push(`<user_supplied_event_details>\n${eventDetails}\n</user_supplied_event_details>`);
+    }
+
+    if (eventDate) {
+      const daysUntil = Math.ceil((new Date(eventDate).getTime() - Date.now()) / 86400000);
+      const phase = daysUntil > 28 ? "Announcement"
+        : daysUntil > 14 ? "Awareness"
+        : daysUntil > 3 ? "Urgency"
+        : "Final Push";
+      eventParts.push(`<campaign_timeline>\nEvent/deadline date: ${eventDate}\nDays remaining: ${daysUntil}\nCurrent phase: ${phase}\nGenerate posts appropriate for the ${phase} phase of the campaign arc.\n</campaign_timeline>`);
+    }
+
+    if (eventParts.length > 0) {
+      contextSections.push(eventParts.join("\n\n"));
+    }
+  }
+
+  // Supplemental content from additional URLs
+  if (supplementalContent) {
+    contextSections.push(`<supplemental_sources>\nAdditional context from related pages. Use this to enrich posts but prioritize the primary source.\n\n${supplementalContent}\n</supplemental_sources>`);
+  }
+
+  if (contextSections.length === 0) {
     return basePrompt;
   }
 
-  // Build type-specific context to inject
-  const typeContext = buildTypeContext(campaignTypeRule);
-  if (!typeContext) {
-    return basePrompt;
-  }
+  const allContext = contextSections.join("\n\n");
 
-  // Inject type context before the output_format section
+  // Inject before the output_format section
   const outputFormatMarker = "<output_format>";
   const insertionPoint = basePrompt.indexOf(outputFormatMarker);
 
   if (insertionPoint === -1) {
-    // Fallback: prepend to the prompt
-    return `${typeContext}\n\n${basePrompt}`;
+    return `${allContext}\n\n${basePrompt}`;
   }
 
   const before = basePrompt.slice(0, insertionPoint);
   const after = basePrompt.slice(insertionPoint);
 
-  return `${before}${typeContext}\n\n${after}`;
+  return `${before}${allContext}\n\n${after}`;
 }
 
 /**
