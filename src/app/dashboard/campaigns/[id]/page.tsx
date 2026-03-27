@@ -89,6 +89,7 @@ import {
   Upload,
   ImageOff,
   Pencil,
+  Layers,
   Link2Off,
 } from "lucide-react";
 
@@ -893,6 +894,10 @@ function CampaignPostRow({
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
   const platformLower = toPlatformId(post.platform);
 
+  // Count total images (hero + media URLs)
+  const mediaUrlCount = post.mediaUrls ? post.mediaUrls.split("\n").filter((u) => u.trim()).length : 0;
+  const totalImages = (post.imageUrl ? 1 : 0) + mediaUrlCount;
+
   return (
     <div
       role="button"
@@ -916,6 +921,13 @@ function CampaignPostRow({
             <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
               <Maximize2 className="h-3 w-3 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
             </div>
+            {/* Multi-image count badge */}
+            {totalImages > 1 && (
+              <span className="absolute bottom-0.5 right-0.5 bg-black/70 text-white text-[9px] font-medium px-1 py-0.5 rounded flex items-center gap-0.5">
+                <Layers className="h-2.5 w-2.5" />
+                {totalImages}
+              </span>
+            )}
           </div>
         ) : (
           <div className="h-14 w-14 shrink-0 rounded-lg bg-muted flex items-center justify-center">
@@ -1112,6 +1124,33 @@ function PostDetailView({
     if (url) addImageUrl(url);
   };
 
+  // Content editing
+  const [isEditingContent, setIsEditingContent] = useState(false);
+  const [editedContent, setEditedContent] = useState(post.content || "");
+
+  // Reset content edit state on post navigation
+  if (prevPostId !== post.id && isEditingContent) {
+    setIsEditingContent(false);
+    setEditedContent(post.content || "");
+  }
+
+  const saveContentMutation = useMutation({
+    mutationFn: async (content: string) => {
+      const res = await fetch(`/api/posts/${post.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content }),
+      });
+      if (!res.ok) throw new Error("Failed to save content");
+    },
+    onSuccess: () => {
+      setIsEditingContent(false);
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success("Content saved");
+    },
+    onError: () => toast.error("Failed to save content"),
+  });
+
   // Navigation
   const currentIndex = posts.findIndex((p) => p.id === post.id);
   const prevPost = currentIndex > 0 ? posts[currentIndex - 1] : null;
@@ -1167,92 +1206,136 @@ function PostDetailView({
           </Badge>
         </div>
 
-        {/* Image gallery — multi-image with add/remove for carousels */}
-        <div className="px-6 pb-3">
-          {mediaImages.length > 0 ? (
-            <div className="space-y-2">
-              {/* Image strip — scrollable for multiple images */}
-              <div className={cn(
-                "flex gap-2 overflow-x-auto pb-1",
-                mediaImages.length === 1 ? "" : "snap-x snap-mandatory"
-              )}>
-                {mediaImages.map((imgUrl, idx) => (
-                  <div
-                    key={idx}
-                    className={cn(
-                      "relative group cursor-pointer shrink-0 snap-start rounded-lg overflow-hidden bg-muted",
-                      mediaImages.length === 1 ? "w-full" : "w-48 h-48"
-                    )}
-                    onClick={() => {
-                      setLightboxIndex(idx);
-                      setLightboxOpen(true);
-                    }}
+        {/* Image gallery — multi-image with add/remove/reorder for carousels */}
+        <div className="px-6 pb-3 space-y-2">
+          {/* Images — always show as strip when multiple */}
+          {mediaImages.length > 0 && (
+            <>
+              {mediaImages.length === 1 ? (
+                /* Single image — full width with click to lightbox */
+                <div
+                  className="rounded-lg overflow-hidden bg-muted relative group cursor-pointer"
+                  onClick={() => { setLightboxIndex(0); setLightboxOpen(true); }}
+                >
+                  <img src={mediaImages[0]} alt="" className="w-full max-h-64 object-cover" />
+                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors flex items-center justify-center">
+                    <Maximize2 className="h-5 w-5 text-white opacity-0 group-hover:opacity-100 transition-opacity drop-shadow-md" />
+                  </div>
+                  {/* Remove on hover */}
+                  <Button
+                    variant="destructive"
+                    size="icon"
+                    className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                    onClick={(e) => { e.stopPropagation(); removeImage(0); }}
                   >
-                    <img
-                      src={imgUrl}
-                      alt=""
-                      className={cn(
-                        "object-cover",
-                        mediaImages.length === 1 ? "w-full max-h-64" : "w-48 h-48"
-                      )}
-                    />
-                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
-                    {/* Remove button */}
-                    <Button
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-1.5 right-1.5 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        removeImage(idx);
-                      }}
+                    <X className="h-3 w-3" />
+                  </Button>
+                </div>
+              ) : (
+                /* Multiple images — horizontal strip */
+                <div className="flex gap-2 overflow-x-auto pb-1 snap-x snap-mandatory">
+                  {mediaImages.map((imgUrl, idx) => (
+                    <div
+                      key={idx}
+                      className="relative group cursor-pointer shrink-0 snap-start rounded-lg overflow-hidden bg-muted w-40 h-40"
+                      onClick={() => { setLightboxIndex(idx); setLightboxOpen(true); }}
                     >
-                      <X className="h-3 w-3" />
-                    </Button>
-                    {/* Slide number for carousels */}
-                    {mediaImages.length > 1 && (
-                      <span className="absolute bottom-1.5 left-1.5 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
+                      <img src={imgUrl} alt="" className="w-40 h-40 object-cover" />
+                      <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors" />
+                      {/* Reorder buttons */}
+                      <div className="absolute top-1 left-1 flex gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {idx > 0 && (
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="h-5 w-5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = [...mediaImages];
+                              [next[idx - 1], next[idx]] = [next[idx], next[idx - 1]];
+                              setMediaImages(next);
+                              saveImagesMutation.mutate(next);
+                            }}
+                          >
+                            <ArrowLeft className="h-3 w-3" />
+                          </Button>
+                        )}
+                        {idx < mediaImages.length - 1 && (
+                          <Button
+                            variant="secondary"
+                            size="icon"
+                            className="h-5 w-5"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const next = [...mediaImages];
+                              [next[idx], next[idx + 1]] = [next[idx + 1], next[idx]];
+                              setMediaImages(next);
+                              saveImagesMutation.mutate(next);
+                            }}
+                          >
+                            <ArrowLeft className="h-3 w-3 rotate-180" />
+                          </Button>
+                        )}
+                      </div>
+                      {/* Remove button */}
+                      <Button
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={(e) => { e.stopPropagation(); removeImage(idx); }}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                      {/* Slide number */}
+                      <span className="absolute bottom-1 left-1 bg-black/60 text-white text-[10px] px-1.5 py-0.5 rounded">
                         {idx + 1}/{mediaImages.length}
                       </span>
-                    )}
-                  </div>
-                ))}
+                    </div>
+                  ))}
+                </div>
+              )}
 
-                {/* Add more button inline */}
-                <button
-                  type="button"
-                  onClick={() => setShowAddImage(true)}
-                  className="shrink-0 w-48 h-48 rounded-lg border-2 border-dashed border-border flex flex-col items-center justify-center gap-1 hover:border-primary/50 transition-colors"
-                  style={mediaImages.length === 1 ? { width: "6rem", height: "auto", minHeight: "4rem" } : {}}
-                >
-                  <Plus className="h-5 w-5 text-muted-foreground" />
-                  <span className="text-[10px] text-muted-foreground">Add</span>
-                </button>
-              </div>
-
-              {/* Carousel badge */}
+              {/* Carousel info */}
               {mediaImages.length > 1 && (
                 <p className="text-[11px] text-muted-foreground">
                   {mediaImages.length} images — will post as carousel on supported platforms
                 </p>
               )}
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowAddImage(true)}
-              className="w-full rounded-lg border-2 border-dashed border-border p-6 text-center hover:border-primary/50 transition-colors"
-            >
-              <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-              <p className="text-xs text-muted-foreground">Add an image</p>
-            </button>
+            </>
           )}
+
+          {/* Always-visible action bar */}
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="text-xs"
+              onClick={() => setShowAddImage(!showAddImage)}
+            >
+              <Plus className="h-3 w-3 mr-1" />
+              {mediaImages.length === 0 ? "Add image" : "Add more images"}
+            </Button>
+            {mediaImages.length === 1 && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground"
+                onClick={() => {
+                  removeImage(0);
+                  setShowAddImage(true);
+                }}
+              >
+                <Pencil className="h-3 w-3 mr-1" />
+                Replace
+              </Button>
+            )}
+          </div>
 
           {/* Add image panel — drag-drop + paste URL */}
           {showAddImage && (
             <div
               className={cn(
-                "mt-2 rounded-lg border-2 border-dashed p-4 space-y-3 transition-colors",
+                "rounded-lg border-2 border-dashed p-4 space-y-3 transition-colors",
                 isDragging ? "border-primary bg-primary/5" : "border-border bg-muted/30"
               )}
               onDrop={handleDrop}
@@ -1354,14 +1437,66 @@ function PostDetailView({
           </div>
         )}
 
-        {/* Full content */}
+        {/* Full content — editable */}
         <div className="px-6 pb-3">
-          <p className="text-sm whitespace-pre-wrap">
-            {post.content || "(No content)"}
-          </p>
-          <p className="text-xs text-muted-foreground mt-2">
-            {charCount} characters
-          </p>
+          {isEditingContent ? (
+            <div className="space-y-2">
+              <Textarea
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                rows={8}
+                className="text-sm"
+                autoFocus
+              />
+              <div className="flex items-center justify-between">
+                <p className="text-xs text-muted-foreground">
+                  {editedContent.length} characters
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => {
+                      setEditedContent(post.content || "");
+                      setIsEditingContent(false);
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="text-xs"
+                    onClick={() => saveContentMutation.mutate(editedContent)}
+                    disabled={saveContentMutation.isPending || editedContent === post.content}
+                  >
+                    {saveContentMutation.isPending ? "Saving..." : "Save"}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div
+              className="group relative cursor-pointer rounded-md hover:bg-muted/30 transition-colors p-1 -m-1"
+              onClick={() => {
+                setEditedContent(post.content || "");
+                setIsEditingContent(true);
+              }}
+            >
+              <p className="text-sm whitespace-pre-wrap">
+                {post.content || "(No content)"}
+              </p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-muted-foreground">
+                  {charCount} characters
+                </p>
+                <span className="text-xs text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
+                  <Pencil className="h-3 w-3" />
+                  Click to edit
+                </span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Article link — launch the source URL in browser */}

@@ -33,6 +33,10 @@ export async function PATCH(
       }
     }
 
+    if (body.content !== undefined) {
+      fields["Content"] = body.content;
+    }
+
     if (Object.keys(fields).length === 0) {
       return NextResponse.json(
         { error: "No valid fields to update" },
