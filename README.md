@@ -154,9 +154,9 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Short.io link cleanup on campaign reset and delete
 - [x] **Phase I:** Per-brand Short.io domain configuration (jb9.me / artsy.short.gy)
 - [x] **Phase I:** og:image fallback — extract first content image when no og:image metadata
-- [ ] **Phase I:** Post content inline editing (click to edit, save/cancel)
-- [ ] **Phase I:** Multi-image carousel support (add/remove/reorder images per post)
-- [ ] **Phase I:** Post image swap (drag-drop, paste URL, file upload)
+- [x] **Phase I:** Post content inline editing (click to edit, save/cancel)
+- [x] **Phase I:** Multi-image carousel support (add/remove/reorder images per post)
+- [x] **Phase I:** Post image swap (drag-drop, paste URL, file upload)
 - [ ] **Phase I:** Post approve/dismiss actions
 - [ ] **Phase I:** Push approved posts to Zernio scheduler
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
