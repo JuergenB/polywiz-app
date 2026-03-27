@@ -163,11 +163,12 @@ export async function POST(
         });
 
         if (zernioError) {
+          console.error(`[publish] Zernio error for ${platform}:`, JSON.stringify(zernioError));
           results.push({
             postId: post.id,
             platform,
             success: false,
-            error: String(zernioError),
+            error: typeof zernioError === "object" ? JSON.stringify(zernioError) : String(zernioError),
           });
           continue;
         }
