@@ -59,7 +59,7 @@ social-media-promo-scheduler/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
-│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset
+│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset, POST [id]/schedule, POST [id]/publish
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
@@ -90,6 +90,7 @@ social-media-promo-scheduler/
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
 │   │   ├── brand-access.ts     # Server-side brand access helpers (user-brand mapping)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
+│   │   ├── scheduling.ts       # Tapering schedule algorithm, date assignment with collision avoidance
 │   │   ├── short-io.ts         # Short.io link shortener (per-brand domain/key)
 │   │   ├── prompts/            # Generation prompt templates + dynamic compose-prompt.ts
 │   │   └── brand-context.tsx   # BrandProvider + useBrand() hook
@@ -131,7 +132,7 @@ social-media-promo-scheduler/
 |-------|-----|---------|
 | Brands | `tblK6tDXvx8Qt0CXh` | Brand profiles, voice guidelines, logos, Zernio profile links |
 | Campaigns | `tbl4S3vdDR4JgBT1d` | Campaign config (URL, type, duration, bias, editorial direction, og:image, event date, event details, additional URLs, target platforms, max variants per platform) |
-| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status, scheduling. **Image Upload** attachment field for per-post image swap/override |
+| Posts | `tblyUEPOJXxpQDZNL` | Generated post drafts per platform, approval status (Draft/Approved/Dismissed), scheduling status (Queued/Scheduled/Published). **Image Upload** attachment field for per-post image swap/override |
 | Platform Settings | `tbl3CXqVmk4GVkmQn` | 13 records: character limits, URL handling, tone per platform |
 | Image Sizes | `tbl1gXZgmKzfLH2X5` | 29 records: image dimensions per platform per image type |
 | Campaign Type Rules | `tblh0R7a5PyNZXt2Y` | 11 records: type definitions, descriptions, icons, status, scraper strategy (includes "Open Call" — Coming Soon) |
