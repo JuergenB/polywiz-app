@@ -96,6 +96,9 @@ export default function NewCampaignPage() {
   const [brandPickerOpen, setBrandPickerOpen] = useState(false);
   const [voiceExpanded, setVoiceExpanded] = useState(false);
 
+  // Campaign start date (when to begin posting — defaults to today)
+  const [startDate, setStartDate] = useState("");
+
   // Event-specific state
   const [eventDate, setEventDate] = useState("");
   const [eventDetails, setEventDetails] = useState("");
@@ -168,7 +171,8 @@ export default function NewCampaignPage() {
     return [...cats];
   }, [genRulesData]);
 
-  const canSubmit = url.trim() !== "" && type !== null && !isSubmitting;
+  const hasStartDateConflict = isDateDriven && startDate && eventDate && new Date(startDate) >= new Date(eventDate);
+  const canSubmit = url.trim() !== "" && type !== null && !isSubmitting && !hasStartDateConflict;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -185,6 +189,7 @@ export default function NewCampaignPage() {
           durationDays,
           distributionBias,
           editorialDirection,
+          ...(startDate ? { startDate } : {}),
           ...(isDateDriven && eventDate ? { eventDate } : {}),
           ...(isDateDriven && eventDetails ? { eventDetails } : {}),
           ...(additionalUrls.filter(Boolean).length > 0 ? { additionalUrls: additionalUrls.filter(Boolean).join("\n") } : {}),
@@ -587,6 +592,35 @@ export default function NewCampaignPage() {
           </CardContent>
         </Card>
       )}
+
+      {/* Campaign Start Date — when to begin posting */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-base">Campaign Start</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+            When to start posting
+          </Label>
+          <Input
+            type="date"
+            value={startDate}
+            min={new Date().toISOString().split("T")[0]}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-48"
+          />
+          <p className="text-xs text-muted-foreground">
+            {startDate
+              ? `Posts will be scheduled starting ${new Date(startDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}.`
+              : "Defaults to today. Set a future date to avoid overlap with campaigns that are still running."}
+          </p>
+          {isDateDriven && startDate && eventDate && new Date(startDate) >= new Date(eventDate) && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Campaign start must be before the event date.
+            </p>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Duration & Distribution */}
       <Card>

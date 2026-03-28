@@ -11,6 +11,7 @@ interface CampaignFields {
   "Distribution Bias": string;
   Status: string;
   "Event Date": string;
+  "Start Date": string;
 }
 
 interface PostFields {
@@ -69,9 +70,18 @@ export async function POST(
     const durationDays = campaign.fields["Duration Days"] || 90;
     const bias = (campaign.fields["Distribution Bias"] || "Front-loaded") as DistributionBias;
 
-    // Start date: today (or for events, calculate from event date backwards)
-    const startDate = new Date();
-    startDate.setHours(0, 0, 0, 0);
+    // Start date: use campaign's Start Date if set, otherwise today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    let startDate: Date;
+    if (campaign.fields["Start Date"]) {
+      const campaignStart = new Date(campaign.fields["Start Date"] + "T00:00:00");
+      // If the stored start date is in the past, use today instead
+      startDate = campaignStart > today ? campaignStart : today;
+    } else {
+      startDate = today;
+    }
 
     // For event campaigns, if the event date is set, use it to define the end
     // and adjust duration accordingly

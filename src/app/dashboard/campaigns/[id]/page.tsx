@@ -903,7 +903,7 @@ export default function CampaignDetailPage() {
               {posts.some((p) => p.scheduledDate && ["Queued", "Scheduled", "Published"].includes(p.status)) && campaign && (
                 <CampaignTimeline
                   posts={posts}
-                  campaignStartDate={new Date()}
+                  campaignStartDate={campaign.startDate ? new Date(campaign.startDate + "T00:00:00") : new Date()}
                   durationDays={campaign.durationDays}
                   campaignId={campaignId}
                 />
@@ -1979,6 +1979,7 @@ function CampaignSettingsEditable({
   const [customDuration, setCustomDuration] = useState(
     !DURATION_PRESETS.some((p) => p.days === campaign.durationDays)
   );
+  const [startDate, setStartDate] = useState(campaign.startDate || "");
   const [eventDate, setEventDate] = useState(campaign.eventDate || "");
   const [eventDetails, setEventDetails] = useState(campaign.eventDetails || "");
   const [additionalUrlsList, setAdditionalUrlsList] = useState<string[]>(
@@ -1993,6 +1994,7 @@ function CampaignSettingsEditable({
     durationDays !== campaign.durationDays ||
     distributionBias !== (campaign.distributionBias || "Front-loaded") ||
     editorialDirection !== (campaign.editorialDirection || "") ||
+    startDate !== (campaign.startDate || "") ||
     eventDate !== (campaign.eventDate || "") ||
     eventDetails !== (campaign.eventDetails || "") ||
     additionalUrlsList.filter(Boolean).join("\n") !== (campaign.additionalUrls || "");
@@ -2013,6 +2015,7 @@ function CampaignSettingsEditable({
           durationDays,
           distributionBias,
           editorialDirection,
+          startDate: startDate || undefined,
           eventDate: eventDate || undefined,
           eventDetails: eventDetails || undefined,
           additionalUrls: additionalUrlsList.filter(Boolean).join("\n") || undefined,
@@ -2178,6 +2181,32 @@ function CampaignSettingsEditable({
           {type && (
             <p className="text-xs text-muted-foreground bg-muted/50 rounded-lg p-3">
               {CAMPAIGN_TYPE_DESCRIPTIONS[type]}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Campaign Start Date — when to begin posting */}
+      <Card>
+        <CardContent className="pt-6 space-y-2">
+          <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+            Campaign Start (when to begin posting)
+          </Label>
+          <Input
+            type="date"
+            value={startDate}
+            min={new Date().toISOString().split("T")[0]}
+            onChange={(e) => setStartDate(e.target.value)}
+            className="w-48"
+          />
+          <p className="text-xs text-muted-foreground">
+            {startDate
+              ? `Posts will be scheduled starting ${new Date(startDate + "T00:00:00").toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}.`
+              : "Defaults to today if not set. Use a future date to avoid overlap with running campaigns."}
+          </p>
+          {isDateDriven && startDate && eventDate && new Date(startDate) >= new Date(eventDate) && (
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Start date must be before the event date.
             </p>
           )}
         </CardContent>
@@ -2363,6 +2392,13 @@ function CampaignSettingsReadOnly({ campaign }: { campaign: Campaign }) {
             <span className="flex items-center gap-1.5 text-sm">
               <TypeIcon className="h-4 w-4 text-muted-foreground" />
               {campaign.type}
+            </span>
+          </SettingsField>
+          <SettingsField label="Campaign Start">
+            <span className="text-sm">
+              {campaign.startDate
+                ? new Date(campaign.startDate + "T00:00:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })
+                : "Today (default)"}
             </span>
           </SettingsField>
           <SettingsField label="Duration">

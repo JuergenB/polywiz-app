@@ -754,8 +754,21 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
   // Strip #start or other fragments from the base URL for clean anchor links
   const baseUrl = url.split("#")[0];
 
-  // Newsletters use story-level extraction (anchor/storyTitle on each image),
-  // not heading-based sectioning. Return empty sections array.
+  // Synthesize sections from newsletter stories so the unified image catalog
+  // and multi-section prompt paths work for newsletters too.
+  // Each story becomes a section with heading = storyTitle, image = story image.
+  const sections: ContentSection[] = [];
+  if (stories.length > 0) {
+    for (const story of stories) {
+      sections.push({
+        heading: story.storyTitle || story.alt || "",
+        level: 2,
+        content: "", // Story content is in the markdown; heading is enough for the catalog
+        images: [story],
+      });
+    }
+  }
+
   const heroImage = ogImage
     ? { url: ogImage, alt: metadata.ogTitle || metadata.title || "" }
     : images[0] || null;
@@ -765,7 +778,7 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
     description: metadata.description || metadata.ogDescription || metadata["og:description"] || "",
     content: truncatedContent,
     images,
-    sections: [],
+    sections,
     heroImage,
     ogImage,
     author: metadata.author || null,
