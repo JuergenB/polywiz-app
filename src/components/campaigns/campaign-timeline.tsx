@@ -195,9 +195,10 @@ export function CampaignTimeline({
             const dayLabelWidth = 20;
             const gap = 2;
             const availableWidth = containerWidth - dayLabelWidth - 16; // padding
-            const cellSize = zoomLevel === "days"
-              ? Math.min(32, Math.max(10, Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks)))
-              : Math.min(24, Math.max(8, Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks)));
+            // Cell size scales to fill width. For 7 rows, cap height so grid isn't too tall.
+            const rawCellSize = Math.floor((availableWidth - (totalWeeks - 1) * gap) / totalWeeks);
+            const maxCellHeight = 48; // cap so 7 rows × 48px = 336px max grid height
+            const cellSize = Math.max(10, Math.min(rawCellSize, maxCellHeight));
             const cellStep = cellSize + gap;
 
             return zoomLevel === "days" ? (
