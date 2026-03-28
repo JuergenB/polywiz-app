@@ -247,23 +247,26 @@ export default function CampaignDetailPage() {
   const campaign = data?.campaign;
   const posts = data?.posts ?? [];
 
-  // Initialize genPlatforms: prefer saved campaign values, fall back to connected accounts
+  // Initialize genPlatforms: prefer saved campaign values, fall back to connected accounts.
+  // Wait for campaign data to load before falling back, to avoid a race condition
+  // where connected accounts load first and override saved platform selections.
   useEffect(() => {
     if (genPlatformsInitialized) return;
+    if (!campaign) return; // Wait for campaign data to load
 
     // Try campaign's saved target platforms first
-    if (campaign?.targetPlatforms && campaign.targetPlatforms.length > 0) {
+    if (campaign.targetPlatforms && campaign.targetPlatforms.length > 0) {
       setGenPlatforms(new Set(campaign.targetPlatforms));
       setGenPlatformsInitialized(true);
       return;
     }
 
-    // Fall back to connected accounts
+    // Campaign loaded but has no saved platforms — fall back to connected accounts
     if (connectedPlatforms.size > 0) {
       setGenPlatforms(new Set(connectedPlatforms));
       setGenPlatformsInitialized(true);
     }
-  }, [connectedPlatforms, genPlatformsInitialized, campaign?.targetPlatforms]);
+  }, [connectedPlatforms, genPlatformsInitialized, campaign]);
 
   // Initialize genMaxPerPlatform from campaign's saved value
   const [genMaxInitialized, setGenMaxInitialized] = useState(false);
