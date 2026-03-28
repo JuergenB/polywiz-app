@@ -216,6 +216,7 @@ export default function CampaignDetailPage() {
   const [genPlatformsInitialized, setGenPlatformsInitialized] = useState(false);
   const [genMaxPerPlatform, setGenMaxPerPlatform] = useState<number | null>(null); // null = auto
   const [settingsUnsaved, setSettingsUnsaved] = useState(false);
+  const [activeTab, setActiveTab] = useState("posts");
   const queryClient = useQueryClient();
 
   // Fetch connected accounts for the current brand
@@ -353,6 +354,32 @@ export default function CampaignDetailPage() {
     (p) => p.status === "Queued"
   ).length;
 
+  // ── Quick approve/dismiss from list view ─────────────────────────────
+  const quickApprove = async (postId: string) => {
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          status: "Approved",
+          approvedBy: pageSession?.user?.name || pageSession?.user?.email || "",
+        }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {}
+  };
+
+  const quickDismiss = async (postId: string) => {
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Dismissed" }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+    } catch {}
+  };
+
   // ── Generate posts handler (SSE) ─────────────────────────────────────
   const handleGenerate = async () => {
     setIsGenerating(true);
@@ -419,7 +446,8 @@ export default function CampaignDetailPage() {
     }
 
     setIsGenerating(false);
-    // Refresh campaign data to show generated posts
+    // Switch to Posts tab and refresh to show generated posts
+    setActiveTab("posts");
     queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
   };
 
@@ -762,7 +790,7 @@ export default function CampaignDetailPage() {
       })()}
 
       {/* Tabs: Posts / Settings */}
-      <Tabs defaultValue="posts">
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="posts">
             Posts
@@ -940,6 +968,8 @@ export default function CampaignDetailPage() {
                           post={post}
                           campaignStatus={campaign.status}
                           onClick={() => setSelectedPost(post)}
+                          onApprove={() => quickApprove(post.id)}
+                          onDismiss={() => quickDismiss(post.id)}
                         />
                       ))}
                     </div>
@@ -1137,10 +1167,14 @@ function CampaignPostRow({
   post,
   campaignStatus,
   onClick,
+  onApprove,
+  onDismiss,
 }: {
   post: Post;
   campaignStatus: CampaignStatus;
   onClick: () => void;
+  onApprove?: () => void;
+  onDismiss?: () => void;
 }) {
   const [thumbLightbox, setThumbLightbox] = useState(false);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
@@ -1231,12 +1265,18 @@ function CampaignPostRow({
         {/* Review actions */}
         {campaignStatus === "Review" && post.status === "Pending" && (
           <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
-            <span className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground">
+            <button
+              onClick={onApprove}
+              className="inline-flex items-center rounded-md border border-input bg-background px-2.5 py-1 text-xs font-medium text-muted-foreground hover:bg-green-50 hover:text-green-700 hover:border-green-200 transition-colors"
+            >
               Approve
-            </span>
-            <span className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50">
+            </button>
+            <button
+              onClick={onDismiss}
+              className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50 hover:text-destructive transition-colors"
+            >
               Dismiss
-            </span>
+            </button>
           </div>
         )}
       </div>
