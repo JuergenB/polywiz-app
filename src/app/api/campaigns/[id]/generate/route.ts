@@ -577,9 +577,23 @@ export async function POST(
           );
         });
 
-        // Build catalog images (hero excluded) — must match prompt catalog exactly
+        // Build catalog images — must match prompt catalog exactly.
+        // For multi-section: images in section order (section-derived labels).
+        // For single-section: images in page order, hero excluded.
         const heroUrl = blogData.heroImage?.url || blogData.ogImage || "";
-        const catalogImages = contentImages.filter((img) => img.url !== heroUrl).slice(0, 20);
+        let catalogImages: typeof contentImages;
+        if (isMultiSection) {
+          // Build from sections in order — matches the prompt's section-derived catalog
+          const sectionImgs: typeof contentImages = [];
+          for (const s of contentSections.slice(0, 12)) {
+            for (const img of s.images) {
+              sectionImgs.push(img);
+            }
+          }
+          catalogImages = sectionImgs;
+        } else {
+          catalogImages = contentImages.filter((img) => img.url !== heroUrl).slice(0, 20);
+        }
 
         // Section-aware variant count: one variant per section for multi-section,
         // duration-based for single-section
@@ -657,8 +671,9 @@ export async function POST(
 
             const imgIdx = post.imageIndex ?? 0;
 
+            // Unified catalog lookup — works for both multi-section and single-section.
+            // Claude picks imageIndex from the numbered catalog in the prompt.
             if (imgIdx > 0 && imgIdx <= catalogImages.length) {
-              // imageIndex maps to catalogImages (hero excluded, 1-based)
               post.imageUrl = catalogImages[imgIdx - 1].url;
             } else {
               // imageIndex 0 or out of range: hero/general image

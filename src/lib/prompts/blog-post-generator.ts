@@ -204,28 +204,33 @@ ${contentSections.slice(0, 8).map((s, i) => `  Section ${i + 1}: ${s.heading}`).
 
 Each variant must match its sectionIndex — do NOT write about "${contentSections[0]?.heading}" while setting sectionIndex to 2. The image assigned to each post will be determined by sectionIndex, so a mismatch means the wrong artist's artwork appears with the wrong artist's text.`;
 
-    // Build image catalog for multi-section
-    const sectionImageCatalog = contentSections
-      .slice(0, 8)
-      .flatMap((s, sIdx) => s.images.map((img, iIdx) => ({
-        index: sIdx * 10 + iIdx + 1, // unique index
-        alt: img.alt || `Section ${sIdx + 1} image`,
-        sectionHeading: s.heading,
-      })));
+    // Build numbered image catalog from sections — use section heading as
+    // description when alt text is empty (common on Ghost, WordPress, etc.)
+    const heroUrl = blogData.heroImage?.url || blogData.ogImage || "";
+    const sectionCatalogImages: { url: string; label: string }[] = [];
+    for (const s of contentSections.slice(0, 12)) {
+      for (const img of s.images) {
+        const label = img.alt && img.alt !== "image" && img.alt !== "untitled"
+          ? img.alt
+          : `Image from section: ${s.heading}`;
+        sectionCatalogImages.push({ url: img.url, label });
+      }
+    }
+
+    const imageCatalog = sectionCatalogImages
+      .map((img, i) => `Image ${i + 1}: "${img.label}"`)
+      .join("\n");
 
     imageInstructions = `<available_images>
-${contentSections.slice(0, 8).map((s, i) =>
-  `Section ${i + 1} (${s.heading}): ${s.images.length > 0 ? s.images.map(img => `"${img.alt || 'untitled'}"`).join(", ") : "no images"}`
-).join("\n")}
-Image 0: Event hero/general image (use when post is about the event as a whole)
+Image 0: Article hero/general image (use when post is about the article as a whole)
+${imageCatalog}
 </available_images>
 
 IMAGE SELECTION RULES:
-- Set "imageIndex" to the section number (1-${contentSections.length}) whose image should accompany the post.
-- Set imageIndex to 0 for posts about the event/topic as a whole.
-- If you write about "${contentSections[0]?.heading}", set imageIndex to 1.
-- Match the image to what the post text discusses. Wrong image = wrong person's work shown.
-- If you CANNOT confidently identify who is associated with a specific image, set imageIndex to 0 and write about the overall topic instead.
+- Set "imageIndex" to the image number from the catalog above that matches your post content.
+- Set imageIndex to 0 for posts about the article/event as a whole.
+- Match the image to what the post text discusses. Wrong image = wrong person shown.
+- If you CANNOT confidently match an image, set imageIndex to 0 and write about the overall topic.
 - A mix of person-specific posts and general topic posts is ideal.`;
 
   } else {
@@ -329,13 +334,13 @@ subject: The name of the person/entity this post focuses on, or "" if generic.
 </output_format>
 
 CRITICAL REMINDERS (read these before generating):
+- MANDATORY: variant 1 for each platform MUST be a general event/topic promotional post with imageIndex 0 (hero image). This is NOT optional — do not skip it regardless of editorial direction.
 - Do NOT use any banned words or phrases from the system instructions
 - Each post MUST be unique and optimized for its specific platform
 - Sound like a real person, not a marketing bot
 - Incorporate the brand voice naturally — don't force it
 - Include the link naturally where the platform supports it
 - imageIndex MUST match the post content — pick the image whose description matches what you're writing about
-- sectionIndex MUST match the content for multi-section posts
 - NEVER guess a person's name — if unsure, set imageIndex to 0 and write about the event/topic generically
 - Editorial direction is a stylistic guide, NOT permission to guess names or override image matching rules
 - Return valid JSON only
