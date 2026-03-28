@@ -19,6 +19,7 @@ interface CampaignFields {
   "Event Date": string;
   "Event Details": string;
   "Additional URLs": string;
+  "Start Date": string;
   "Target Platforms": string;
   "Max Variants Per Platform": number;
 }
@@ -96,6 +97,7 @@ export async function GET() {
       eventDate: r.fields["Event Date"] || undefined,
       eventDetails: r.fields["Event Details"] || undefined,
       additionalUrls: r.fields["Additional URLs"] || undefined,
+      startDate: r.fields["Start Date"] || undefined,
       targetPlatforms: r.fields["Target Platforms"] ? r.fields["Target Platforms"].split(",") : undefined,
       maxVariantsPerPlatform: r.fields["Max Variants Per Platform"] ?? undefined,
     }));
@@ -147,6 +149,7 @@ export async function POST(request: NextRequest) {
       ...(body.eventDate ? { "Event Date": body.eventDate } : {}),
       ...(body.eventDetails ? { "Event Details": body.eventDetails } : {}),
       ...(body.additionalUrls ? { "Additional URLs": body.additionalUrls } : {}),
+      ...(body.startDate ? { "Start Date": body.startDate } : {}),
       ...(body.targetPlatforms ? { "Target Platforms": body.targetPlatforms } : {}),
       ...(body.maxVariantsPerPlatform != null ? { "Max Variants Per Platform": body.maxVariantsPerPlatform } : {}),
     });

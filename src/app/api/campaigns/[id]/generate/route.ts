@@ -272,6 +272,7 @@ interface CampaignFields {
   "Event Date": string;
   "Event Details": string;
   "Additional URLs": string;
+  "Start Date": string;
   "Target Platforms": string;
   "Max Variants Per Platform": number;
 }
@@ -667,14 +668,15 @@ export async function POST(
           const heroFallback = heroUrl || "";
 
           for (const post of result.posts) {
-            if (post.anchor) continue; // Newsletter path: anchors already set
-
             const imgIdx = post.imageIndex ?? 0;
 
-            // Unified catalog lookup — works for both multi-section and single-section.
-            // Claude picks imageIndex from the numbered catalog in the prompt.
+            // Unified catalog lookup — works for all campaign types including newsletters.
+            // For newsletters, also carries over the anchor for story-specific short links.
             if (imgIdx > 0 && imgIdx <= catalogImages.length) {
-              post.imageUrl = catalogImages[imgIdx - 1].url;
+              const catalogImg = catalogImages[imgIdx - 1];
+              post.imageUrl = catalogImg.url;
+              // Carry over anchor/storyTitle for newsletter deep links
+              if (catalogImg.anchor) post.anchor = catalogImg.anchor;
             } else {
               // imageIndex 0 or out of range: hero/general image
               post.imageUrl = heroFallback;

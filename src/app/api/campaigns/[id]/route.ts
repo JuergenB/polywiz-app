@@ -20,6 +20,7 @@ interface CampaignFields {
   "Event Date": string;
   "Event Details": string;
   "Additional URLs": string;
+  "Start Date": string;
   "Target Platforms": string;
   "Max Variants Per Platform": number;
 }
@@ -78,6 +79,7 @@ export async function GET(
       eventDate: record.fields["Event Date"] || undefined,
       eventDetails: record.fields["Event Details"] || undefined,
       additionalUrls: record.fields["Additional URLs"] || undefined,
+      startDate: record.fields["Start Date"] || undefined,
       targetPlatforms: record.fields["Target Platforms"] ? record.fields["Target Platforms"].split(",") : undefined,
       maxVariantsPerPlatform: record.fields["Max Variants Per Platform"] ?? undefined,
     };
@@ -148,6 +150,7 @@ export async function PATCH(
       eventDate: "Event Date",
       eventDetails: "Event Details",
       additionalUrls: "Additional URLs",
+      startDate: "Start Date",
       targetPlatforms: "Target Platforms",
       maxVariantsPerPlatform: "Max Variants Per Platform",
     };

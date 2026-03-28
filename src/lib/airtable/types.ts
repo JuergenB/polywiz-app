@@ -78,6 +78,8 @@ export interface Campaign {
   eventDetails?: string;
   /** Additional source URLs (one per line) for supplemental scraping */
   additionalUrls?: string;
+  /** When to start posting (ISO date string). Defaults to today if not set. */
+  startDate?: string;
   /** Comma-separated platform keys for generation (e.g. "instagram,twitter,linkedin") */
   targetPlatforms?: string[];
   /** Max post variants per platform (null = Auto) */
