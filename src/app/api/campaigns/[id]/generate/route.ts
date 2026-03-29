@@ -553,14 +553,17 @@ export async function POST(
         // Extract event data if available
         const eventData = isEventType ? (blogData as ScrapedEventBlogData).eventData : null;
 
+        const scrapedImageCount = blogData.images.length;
+        const sectionCount = contentSections.length;
+
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "success",
           message: `Scraped: "${blogData.title}"${additionalUrls.length > 0 ? ` + ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}` : ""}`,
           detail: isEventType && eventData
-            ? `Extracted event details: ${Object.entries(eventData).filter(([, v]) => v).map(([k]) => k).join(", ")}`
+            ? `Found ${scrapedImageCount} images · Extracted event details: ${Object.entries(eventData).filter(([, v]) => v).map(([k]) => k).join(", ")}`
             : isMultiSection
-              ? `Found ${blogData.images.length} images across ${contentSections.length} sections (${contentSections.map((s: ContentSection) => s.heading).join(", ")})`
-              : `Found ${blogData.images.length} images, ${blogData.content.length} chars of content`,
+              ? `Found ${scrapedImageCount} images across ${sectionCount} sections (${contentSections.slice(0, 6).map((s: ContentSection) => s.heading).join(", ")}${sectionCount > 6 ? `, +${sectionCount - 6} more` : ""})`
+              : `Found ${scrapedImageCount} images, ${blogData.content.length} chars of content`,
         });
 
         await sleep(DELAY_MS);
@@ -608,12 +611,13 @@ export async function POST(
           : autoCount;
 
         const testModeLabel = maxPerPlatformOverride ? ` (test mode: max ${maxPerPlatformOverride})` : "";
-        const sectionLabel = isMultiSection
-          ? `${contentSections.length} artist sections`
-          : `${contentImages.length} content images`;
+        const catalogLabel = isMultiSection
+          ? `${sectionCount} sections, ${catalogImages.length} images in catalog`
+          : `${catalogImages.length} images in catalog`;
+        const filtered = scrapedImageCount - catalogImages.length;
         sendEvent(controller, encoder, {
           step: 5, totalSteps, status: "running",
-          message: `Detected ${sectionLabel} — generating ${postsPerPlatform} variants per platform${testModeLabel}`,
+          message: `${catalogLabel}${filtered > 0 ? ` (${filtered} filtered)` : ""} — generating ${postsPerPlatform} variants per platform${testModeLabel}`,
         });
 
         await sleep(1000);

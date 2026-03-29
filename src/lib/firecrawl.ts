@@ -671,7 +671,9 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
 
   // ── Extract stories with anchors from Curated.co HTML ───────────
   // Pattern: <a name="ANCHOR"></a> ... <img src="IMAGE"> ... <h3><a>TITLE</a></h3>
-  const storyRegex = /<a\s+name="([^"]+)"><\/a>\s*(?:<a[^>]*>)?\s*<img[^>]+src="([^"]+)"[^>]*>[\s\S]*?<h3[^>]*>\s*<a[^>]*>([^<]+)<\/a>/g;
+  // The negative lookahead (?!<a\s+name=) prevents matching across story boundaries
+  // (fixes cross-story bleed when a non-story item like a podcast promo has no <h3>)
+  const storyRegex = /<a\s+name="([^"]+)"><\/a>\s*(?:<a[^>]*>)?\s*<img[^>]+src="([^"]+)"[^>]*>(?:(?!<a\s+name=)[\s\S])*?<h3[^>]*>\s*<a[^>]*>([^<]+)<\/a>/g;
   const stories: ScrapedImage[] = [];
   let storyMatch;
 
