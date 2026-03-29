@@ -1,0 +1,51 @@
+direction: right
+
+upload: "1. UPLOAD" {
+  style.fill: "#e8f0fe"
+  grid-columns: 1
+  a: "User upload"
+  b: "Firecrawl scrape"
+  c: "og:image extraction"
+  d: "Airtable attachment"
+}
+
+compress: "2. COMPRESS & VALIDATE" {
+  style.fill: "#fef7e0"
+  grid-columns: 1
+  a: "Max 2048px"
+  b: "JPEG ~85%"
+  c: "Target < 2MB"
+}
+
+store: "3. STORE (permanent)" {
+  style.fill: "#e6f4ea"
+  grid-columns: 1
+  a: "Supabase Storage\n(primary)"
+  b: "Zernio presign\n(publish fallback)"
+}
+
+transform: "4. TRANSFORM" {
+  style.fill: "#fce8e6"
+  grid-columns: 1
+  gate: "Brand AI policy gate" {
+    style.border-radius: 8
+    style.fill: "#fff"
+  }
+  allow: "AI uncrop (Replicate)"
+  crop: "Sharp resize / crop"
+  orshot: "Orshot template cards"
+}
+
+deliver: "5. DELIVER via Zernio" {
+  style.fill: "#f3e8fd"
+  grid-columns: 2
+  a: "Single image"
+  b: "Carousel slides"
+  c: "LinkedIn PDF"
+  d: "Story (9:16)"
+}
+
+upload -> compress -> store -> transform -> deliver
+
+transform.gate -> transform.allow: "allow"
+transform.gate -> transform.crop: "crop-only"

@@ -1,0 +1,39 @@
+flowchart TD
+    subgraph UPLOAD["1. UPLOAD"]
+        U1["User upload"]
+        U2["Firecrawl scrape"]
+        U3["og:image extraction"]
+        U4["Airtable attachment"]
+    end
+
+    subgraph COMPRESS["2. COMPRESS & VALIDATE"]
+        C1["Max 2048px longest edge"]
+        C2["JPEG quality ~85%"]
+        C3["Target under 2MB"]
+    end
+
+    subgraph STORE["3. STORE (permanent URLs)"]
+        S1["Supabase Storage (primary)"]
+        S2["Zernio presign (publish fallback)"]
+    end
+
+    subgraph TRANSFORM["4. TRANSFORM (per-platform)"]
+        T0{"Brand AI\npolicy gate"}
+        T1["Sharp resize/crop"]
+        T2["AI uncrop (Replicate)"]
+        T3["Orshot template cards"]
+    end
+
+    subgraph DELIVER["5. DELIVER via Zernio"]
+        D1["Single image post"]
+        D2["Carousel slides"]
+        D3["LinkedIn PDF carousel"]
+        D4["Story 9:16"]
+    end
+
+    UPLOAD --> COMPRESS
+    COMPRESS --> STORE
+    STORE --> TRANSFORM
+    T0 -->|allow| T2
+    T0 -->|crop-only| T1
+    TRANSFORM --> DELIVER
