@@ -103,6 +103,12 @@ Each brand has its own Zernio API key scoped to its profile. Switching brands in
 | Generation UX | Done | Compact progress bar, Save Options persistence, unsaved settings warning, editorial direction tips |
 | Schedule preview | Done | Campaign timeline heatmap with density visualization (#13) |
 | CMS scraping | Done | Ghost excludeTags, event section parsing, supplemental URL entity filtering |
+| Image optimization | Done | Client-side compression (timeout guards), server-side Sharp (PNG/WebP→JPEG), Vercel Blob permanent hosting |
+| Single-post publish | Done | Publish Now button in post detail, double-publish guard, Zernio Post ID extraction |
+| Webhook status sync | Done | Zernio webhook endpoint for post.published/failed/partial → Airtable status update |
+| LinkedIn PDF carousel | Done | Auto-assemble multi-image LinkedIn posts into PDF via pdf-lib at publish time (#65) |
+| lnk.bio integration | Done | Auto-create link-in-bio entry after Instagram publish (The Intersect, hardcoded — #68 for per-brand) |
+| Platform aspect crop | Done | Instagram/Threads max 1.91:1 enforced via center-crop to 16:9 |
 
 **Campaign types for Phase I:**
 - Newsletter (Curated.co) — primary development target
