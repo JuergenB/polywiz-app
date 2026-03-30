@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { createBrandClient } from "@/lib/late-api/client";
+import { assembleCarouselPDF } from "@/lib/pdf-carousel";
+import { ensureAspectRatio } from "@/lib/image-crop";
 
 interface CampaignFields {
   Name: string;
@@ -133,19 +135,49 @@ export async function POST(
       }
 
       try {
-        // Build media items
-        const mediaItems: Array<{ type: "image"; url: string }> = [];
+        // Build media items — collect all image URLs first
+        const imageUrls: string[] = [];
         if (post.fields["Image URL"]) {
-          mediaItems.push({ type: "image", url: post.fields["Image URL"] });
+          imageUrls.push(post.fields["Image URL"]);
         }
-        // Add additional carousel images from Media URLs
         if (post.fields["Media URLs"]) {
           for (const url of post.fields["Media URLs"].split("\n")) {
             const trimmed = url.trim();
-            if (trimmed && !mediaItems.some((m) => m.url === trimmed)) {
-              mediaItems.push({ type: "image", url: trimmed });
+            if (trimmed && !imageUrls.includes(trimmed)) {
+              imageUrls.push(trimmed);
             }
           }
+        }
+
+        // Ensure images meet platform aspect ratio requirements
+        for (let i = 0; i < imageUrls.length; i++) {
+          imageUrls[i] = await ensureAspectRatio(imageUrls[i], platform, post.id);
+        }
+
+        // LinkedIn carousel: multiple images → assemble PDF document
+        let mediaItems: Array<{ type: "image" | "document"; url: string }>;
+        if (platform === "linkedin" && imageUrls.length > 1) {
+          const pdfBuffer = await assembleCarouselPDF(imageUrls);
+          const { data: presignData } = await client.media.getMediaPresignedUrl({
+            body: {
+              filename: `${(campaign.fields.Name || "carousel").replace(/[^a-zA-Z0-9-_ ]/g, "").replace(/\s+/g, "-").slice(0, 60)}.pdf`,
+              contentType: "application/pdf",
+              size: pdfBuffer.length,
+            },
+          });
+          if (presignData?.uploadUrl) {
+            await fetch(presignData.uploadUrl, {
+              method: "PUT",
+              body: new Uint8Array(pdfBuffer),
+              headers: { "Content-Type": "application/pdf" },
+            });
+            mediaItems = [{ type: "document", url: presignData.publicUrl! }];
+          } else {
+            // Fallback to individual images if presign fails
+            mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
+          }
+        } else {
+          mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
         }
 
         // Create post on Zernio

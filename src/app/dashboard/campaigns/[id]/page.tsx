@@ -1592,6 +1592,25 @@ function PostDetailView({
     onError: () => toast.error("Failed to dismiss post"),
   });
 
+  const publishNowMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/publish`, {
+        method: "POST",
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to publish");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success(`Published to ${post.platform} — scheduled in ~2 min`);
+      onClose();
+    },
+    onError: (err: Error) => toast.error(err.message),
+  });
+
   // Content editing
   const [isEditingContent, setIsEditingContent] = useState(false);
   const [editedContent, setEditedContent] = useState(post.content || "");
@@ -2076,9 +2095,26 @@ function PostDetailView({
             </>
           )}
           {post.status === "Approved" && (
-            <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
-              <CheckCircle2 className="mr-1 h-3 w-3" />
-              Approved{post.approvedBy ? ` by ${post.approvedBy}` : ""}
+            <>
+              <Badge variant="secondary" className="bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300">
+                <CheckCircle2 className="mr-1 h-3 w-3" />
+                Approved{post.approvedBy ? ` by ${post.approvedBy}` : ""}
+              </Badge>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={() => publishNowMutation.mutate()}
+                disabled={publishNowMutation.isPending}
+              >
+                <Send className="mr-1.5 h-3.5 w-3.5" />
+                {publishNowMutation.isPending ? "Publishing..." : "Publish Now"}
+              </Button>
+            </>
+          )}
+          {post.status === "Scheduled" && (
+            <Badge variant="secondary" className="bg-green-100 text-green-700 dark:bg-green-950 dark:text-green-300">
+              <Send className="mr-1 h-3 w-3" />
+              Scheduled
             </Badge>
           )}
           {post.status === "Dismissed" && (

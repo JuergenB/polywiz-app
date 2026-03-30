@@ -37,23 +37,32 @@ export function validateImage(file: File): {
   return { valid: true };
 }
 
-/** Check if a PNG has transparency by drawing it to a canvas and scanning alpha. */
+/** Check if a PNG has transparency. Uses OffscreenCanvas with a timeout to avoid hanging. */
 async function hasTransparency(file: File): Promise<boolean> {
   try {
-    const bitmap = await createImageBitmap(file);
-    const canvas = new OffscreenCanvas(
-      Math.min(bitmap.width, 64),
-      Math.min(bitmap.height, 64)
-    );
-    const ctx = canvas.getContext("2d")!;
-    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
-    for (let i = 3; i < data.length; i += 4) {
-      if (data[i] < 250) return true;
-    }
-    return false;
+    if (typeof OffscreenCanvas === "undefined") return false;
+
+    const result = await Promise.race([
+      (async () => {
+        const bitmap = await createImageBitmap(file);
+        const canvas = new OffscreenCanvas(
+          Math.min(bitmap.width, 64),
+          Math.min(bitmap.height, 64)
+        );
+        const ctx = canvas.getContext("2d")!;
+        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        for (let i = 3; i < data.length; i += 4) {
+          if (data[i] < 250) return true;
+        }
+        return false;
+      })(),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 3000)),
+    ]);
+
+    return result;
   } catch {
-    return false; // assume opaque on error
+    return false;
   }
 }
 
@@ -73,13 +82,19 @@ export async function compressImage(file: File): Promise<File> {
   }
 
   try {
-    const compressed = await imageCompression(file, {
-      maxSizeMB: MAX_SIZE_MB,
-      maxWidthOrHeight: MAX_DIMENSION,
-      useWebWorker: true,
-      initialQuality: 0.75,
-      fileType: outputType,
-    });
+    // Timeout the entire compression to 15 seconds
+    const compressed = await Promise.race([
+      imageCompression(file, {
+        maxSizeMB: MAX_SIZE_MB,
+        maxWidthOrHeight: MAX_DIMENSION,
+        useWebWorker: true,
+        initialQuality: 0.75,
+        fileType: outputType,
+      }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error("Compression timed out")), 15000)
+      ),
+    ]);
 
     const converted = outputType && outputType !== file.type
       ? ` [${file.type.split("/")[1]} → ${outputType.split("/")[1]}]`
