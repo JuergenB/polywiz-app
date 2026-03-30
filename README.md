@@ -172,6 +172,10 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Ghost/CMS excludeTags for related posts sections (#58 partial)
 - [x] **Phase I:** Event page section parsing from markdown
 - [x] **Phase I:** Schedule preview heatmap visualization (#13)
+- [x] **Phase I:** Client-side image compression with PNG→JPEG conversion (#64)
+- [x] **Phase I:** Permanent image hosting via Vercel Blob (#62)
+- [x] **Phase I:** Campaign hero image upload (file upload + paste URL) (#62)
+- [x] **Phase I:** Carousel lightbox keyboard navigation + mobile swipe
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
