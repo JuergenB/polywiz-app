@@ -48,6 +48,7 @@ When the user gives multiple instructions in one message, implement ALL of them 
 - **Stack:** Next.js 16, React 19, TypeScript, Tailwind v4, shadcn/ui, Zustand, TanStack Query
 - **API:** Zernio (formerly Late) — `@getlatedev/node` SDK
 - **Data:** Airtable (new base, TBD)
+- **Image Storage:** Vercel Blob (permanent public URLs, `@vercel/blob`)
 - **Deployment:** Vercel
 - **User Timezone:** America/New_York (Eastern Time)
 
@@ -59,7 +60,7 @@ social-media-promo-scheduler/
 │   ├── app/                    # Next.js App Router
 │   │   ├── api/
 │   │   │   ├── brands/         # GET active brands, PATCH update brand
-│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset, POST [id]/schedule, POST [id]/publish
+│   │   │   ├── campaigns/      # GET list, POST create, GET/PATCH/DELETE [id], POST [id]/generate (SSE), POST [id]/reset, POST [id]/schedule, POST [id]/publish, POST/DELETE [id]/image
 │   │   │   ├── campaign-type-rules/ # GET all types, GET/PATCH single type
 │   │   │   ├── generation-rules/ # GET/POST rules, PATCH/DELETE [id]
 │   │   │   ├── feedback/       # GET (last 90 days), POST feedback entries
@@ -88,6 +89,8 @@ social-media-promo-scheduler/
 │   │   ├── late-api/           # Zernio API client & platform types
 │   │   ├── airtable/           # Airtable REST client, TypeScript types, campaign-type-rules fetch, user profile lookup
 │   │   ├── anthropic.ts        # Claude Sonnet 4.6 client (per-brand key resolution)
+│   │   ├── blob-storage.ts     # Vercel Blob upload/delete for permanent image hosting
+│   │   ├── image-compression.ts # Client-side compression, PNG→JPEG conversion, validation
 │   │   ├── brand-access.ts     # Server-side brand access helpers (user-brand mapping)
 │   │   ├── firecrawl.ts        # Blog + newsletter scraper with H2/H3 section parsing & image extraction
 │   │   ├── scheduling.ts       # Tapering schedule algorithm, date assignment with collision avoidance
