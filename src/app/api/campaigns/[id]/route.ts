@@ -153,6 +153,7 @@ export async function PATCH(
       startDate: "Start Date",
       targetPlatforms: "Target Platforms",
       maxVariantsPerPlatform: "Max Variants Per Platform",
+      imageUrl: "Image URL",
     };
 
     const fields: Record<string, unknown> = {};

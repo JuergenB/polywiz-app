@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Storage Options — PolyWiz</title>
+<style>
+  :root { --blue: #2563eb; --red: #dc2626; --green: #16a34a; --amber: #d97706; --gray: #6b7280; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; max-width: 960px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1f2937; background: #fafafa; }
+  h1 { border-bottom: 3px solid var(--blue); padding-bottom: 0.5rem; }
+  h2 { color: var(--blue); margin-top: 2.5rem; }
+  h3 { color: #374151; }
+  .callout { border-left: 4px solid; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 8px 8px 0; }
+  .callout-green { border-color: var(--green); background: #f0fdf4; }
+  .callout-amber { border-color: var(--amber); background: #fffbeb; }
+  .callout-blue { border-color: var(--blue); background: #eff6ff; }
+  .callout-red { border-color: var(--red); background: #fef2f2; }
+  .callout strong { display: block; margin-bottom: 0.25rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; font-size: 0.95em; }
+  th, td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  .cost-table td:nth-child(n+2) { text-align: right; }
+  .cost-table th:nth-child(n+2) { text-align: right; }
+  code { background: #f3f4f6; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+  .winner { background: #dcfce7; font-weight: 600; }
+  .badge { display: inline-block; padding: 0.15em 0.6em; border-radius: 9999px; font-size: 0.8em; font-weight: 600; }
+  .badge-green { background: #dcfce7; color: var(--green); }
+  .badge-red { background: #fee2e2; color: var(--red); }
+  .badge-amber { background: #fef3c7; color: var(--amber); }
+  .badge-blue { background: #dbeafe; color: var(--blue); }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; color: var(--gray); font-size: 0.85em; }
+  .rec-box { border: 2px solid var(--green); border-radius: 12px; padding: 1.5rem; margin: 2rem 0; background: #f0fdf4; }
+  .rec-box h3 { color: var(--green); margin-top: 0; }
+  .scorecard { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; margin: 1.5rem 0; }
+  .scorecard-item { border: 1px solid #d1d5db; border-radius: 8px; padding: 1rem; background: white; }
+  .scorecard-item h4 { margin: 0 0 0.25rem 0; font-size: 0.9em; color: var(--gray); }
+  .scorecard-item .value { font-size: 1.4em; font-weight: 700; }
+</style>
+</head>
+<body>
+
+<h1>Image Storage Options Comparison</h1>
+<p><strong>Date:</strong> 2026-03-29 (updated 2026-03-30) &nbsp;|&nbsp; <strong>Related:</strong> <a href="https://github.com/JuergenB/social-media-promo-scheduler/issues/63">Epic #63 — Image Handling Pipeline</a></p>
+
+<h2>TL;DR</h2>
+
+<div class="rec-box">
+  <h3>Decision: Vercel Blob</h3>
+  <p>Vercel Blob is included in the existing Vercel Pro plan (already paying $20/mo for deployment). <strong>Incremental cost: $0.</strong> Simple <code>put()</code>/<code>del()</code> API, permanent public URLs, edge CDN delivery.</p>
+  <p><strong>Why not Supabase Storage?</strong> While Supabase Pro includes 100 GB storage, each <em>additional project</em> incurs $10/month for a dedicated Postgres instance — even if you only use Storage. Since PolyWiz doesn't need Supabase's database, auth, or edge functions, this is pure overhead. A Supabase project (<code>polywiz</code>) was created and tested before this was discovered.</p>
+  <p><strong>Image profile matters:</strong> Most images are scraped web-optimized images (~sub-200KB), not large user uploads. At these sizes, Vercel Blob's Pro plan limits (100 GB storage, unlimited bandwidth) are more than sufficient. The earlier 1MB-per-image estimates over-weighted upload/compression scenarios.</p>
+</div>
+
+<h2>What We're Solving</h2>
+
+<p>Images in PolyWiz currently exist as URL references — either scraped source URLs or Airtable attachment URLs. Both are fragile:</p>
+
+<table>
+  <tr><th>Source</th><th>Problem</th><th>Impact</th></tr>
+  <tr><td>Airtable attachments</td><td>Signed URLs expire in ~2 hours</td><td>Scheduled posts fail at publish time when Zernio tries to fetch expired URLs</td></tr>
+  <tr><td>Scraped source URLs</td><td>Source sites can go down, restructure URLs, or remove content</td><td>Posts scheduled weeks/months out may reference dead URLs</td></tr>
+  <tr><td>Both</td><td>No control over CDN, cache headers, or image dimensions</td><td>Can't optimize per-platform, can't generate carousels or PDFs reliably</td></tr>
+</table>
+
+<h2>Volume Estimates</h2>
+
+<p>Most images are scraped web-optimized images (~sub-200KB). Only user-uploaded hero images go through compression (targeting ~2MB max). Realistic average: ~200KB per image.</p>
+
+<div class="scorecard">
+  <div class="scorecard-item">
+    <h4>Small Scale (current)</h4>
+    <div class="value">~1.2 GB/mo</div>
+    100 campaigns &times; 30 posts &times; 2 images &times; 200KB<br>
+    ~6 GB bandwidth
+  </div>
+  <div class="scorecard-item">
+    <h4>Medium Scale (6-12 months)</h4>
+    <div class="value">~12 GB/mo</div>
+    500 campaigns &times; 40 posts &times; 3 images &times; 200KB<br>
+    ~60 GB bandwidth
+  </div>
+</div>
+
+<h2>Pricing Comparison</h2>
+
+<table>
+  <tr><th>Service</th><th>Storage (/GB/mo)</th><th>Bandwidth (/GB)</th><th>Free Tier</th><th>CDN?</th></tr>
+  <tr><td>Zernio Presign</td><td>$0 (included)</td><td>$0</td><td>Included in subscription</td><td>Yes</td></tr>
+  <tr><td>Supabase Storage</td><td>$0.021 (after 100 GB)</td><td>$0.03 cached / $0.09 uncached</td><td>Pro: 100 GB storage, 250 GB bandwidth. But $10/mo per additional project.</td><td>Yes (Smart CDN)</td></tr>
+  <tr><td>Amazon S3 + CloudFront</td><td>$0.023</td><td>$0.085 (or $15/mo flat for 50 TB)</td><td>5 GB storage, 100 GB egress (12 mo)</td><td>CloudFront separate</td></tr>
+  <tr><td>Google Cloud Storage</td><td>$0.020</td><td>$0.08 (Cloud CDN)</td><td>5 GB storage, 1 GB egress/mo</td><td>Cloud CDN separate</td></tr>
+  <tr class="winner"><td>Vercel Blob</td><td>$0.023 (after included)</td><td>Unlimited on Pro</td><td>Pro plan (already paying $20/mo): 100 GB storage, unlimited bandwidth</td><td>Yes (edge)</td></tr>
+  <tr><td>Cloudinary</td><td colspan="2">Credit-based (1 credit = 1 GB storage = 1 GB bandwidth)</td><td>25 credits/mo</td><td>Yes</td></tr>
+</table>
+
+<h3>Monthly Cost at Each Scale</h3>
+
+<table class="cost-table">
+  <tr><th>Service</th><th>Small (6 GB / 30 GB)</th><th>Medium (60 GB / 300 GB)</th><th>Notes</th></tr>
+  <tr><td>Zernio Presign</td><td>$0</td><td>$0</td><td>Images locked in Zernio</td></tr>
+  <tr><td>Supabase Storage</td><td>$10/mo *</td><td>$10/mo *</td><td>* Storage is free within Pro limits, but $10/mo per additional project (dedicated Postgres)</td></tr>
+  <tr><td>S3 + CloudFront</td><td>~$16</td><td>~$24</td><td>$15 CloudFront flat + storage/transfer</td></tr>
+  <tr><td>Google Cloud</td><td>~$5</td><td>~$25</td><td>Bandwidth cost dominates at scale</td></tr>
+  <tr class="winner"><td>Vercel Blob (Pro)</td><td>$0 *</td><td>$0 *</td><td>* Already paying $20/mo Pro — both scales within included limits</td></tr>
+  <tr><td>Cloudinary (Plus)</td><td>~$7</td><td>~$19</td><td>Overkill — on-the-fly transforms not needed</td></tr>
+</table>
+
+<div class="callout callout-green">
+  <strong>Key insight: Vercel Blob is $0 incremental at both scales.</strong>
+  You're already paying $20/mo for Vercel Pro. The 100 GB storage and unlimited bandwidth included in your plan will not be exceeded by this app even at medium scale. Supabase looked free on paper but adds $10/mo per additional project for an unused Postgres instance.
+</div>
+
+<h2>Architectural Assessment</h2>
+
+<table>
+  <tr><th>Criterion</th><th>Zernio Presign</th><th>Supabase</th><th>Vercel Blob</th><th>S3</th><th>Airtable Refresh</th></tr>
+  <tr>
+    <td><strong>Integration effort</strong></td>
+    <td><span class="badge badge-green">Already done</span></td>
+    <td><span class="badge badge-amber">~50 lines</span></td>
+    <td><span class="badge badge-green">~20 lines</span></td>
+    <td><span class="badge badge-red">100+ lines + AWS setup</span></td>
+    <td><span class="badge badge-green">~10 lines</span></td>
+  </tr>
+  <tr>
+    <td><strong>Vendor lock-in</strong></td>
+    <td><span class="badge badge-red">High</span> — tied to Zernio</td>
+    <td><span class="badge badge-green">Low</span> — S3-compatible</td>
+    <td><span class="badge badge-amber">Medium</span> — Vercel URLs</td>
+    <td><span class="badge badge-green">Lowest</span></td>
+    <td><span class="badge badge-amber">Medium</span> — depends on undocumented behavior</td>
+  </tr>
+  <tr>
+    <td><strong>Image transforms</strong></td>
+    <td><span class="badge badge-red">None</span></td>
+    <td><span class="badge badge-green">Native</span> — resize, crop, format via URL params</td>
+    <td><span class="badge badge-red">None</span> — need Sharp in serverless</td>
+    <td><span class="badge badge-amber">Lambda@Edge</span> — build it yourself</td>
+    <td><span class="badge badge-red">None</span></td>
+  </tr>
+  <tr>
+    <td><strong>CDN performance</strong></td>
+    <td><span class="badge badge-amber">Unknown</span></td>
+    <td><span class="badge badge-green">Good</span></td>
+    <td><span class="badge badge-green">Excellent</span> — edge network</td>
+    <td><span class="badge badge-green">Excellent</span> — CloudFront</td>
+    <td><span class="badge badge-red">Poor</span> — 2hr TTL URLs</td>
+  </tr>
+  <tr>
+    <td><strong>Future-proof</strong></td>
+    <td><span class="badge badge-red">Dead end</span></td>
+    <td><span class="badge badge-green">Strong</span> — Postgres migration path</td>
+    <td><span class="badge badge-amber">OK</span> — storage only</td>
+    <td><span class="badge badge-green">Strong</span></td>
+    <td><span class="badge badge-red">Fragile</span></td>
+  </tr>
+  <tr>
+    <td><strong>Incremental cost</strong></td>
+    <td>$0</td>
+    <td>$10/mo (project compute)</td>
+    <td><strong>$0</strong> (within Pro plan)</td>
+    <td>$15+/mo</td>
+    <td>$0</td>
+  </tr>
+</table>
+
+<h2>What Proper Image Storage Enables</h2>
+
+<p>Capabilities that URL references alone cannot support:</p>
+
+<ol>
+  <li><strong>Image permanence</strong> — Source sites go down, URLs change. Downloaded and re-hosted images make campaigns resilient.</li>
+  <li><strong>Platform-specific sizing</strong> — Sharp in serverless functions for per-platform transforms: 1080x1350 for Instagram 4:5, 1000x1500 for Pinterest 2:3.</li>
+  <li><strong>Carousel &amp; PDF generation</strong> — Generating LinkedIn carousel PDFs or Instagram carousel sets requires reliable access to source images, not URLs that might 404.</li>
+  <li><strong>Audit trail</strong> — Every image used in every campaign is preserved, even if the source site removes the original.</li>
+  <li><strong>Email/preview generation</strong> — Future email digests or report cards need permanent image URLs you control.</li>
+  <li><strong>Deduplication</strong> — Content-addressed storage can detect duplicate images across campaigns.</li>
+</ol>
+
+<h2>Why NOT Each Option</h2>
+
+<table>
+  <tr><th>Option</th><th>Why not</th></tr>
+  <tr><td>Supabase Storage</td><td>Storage itself is generous on Pro (100 GB), but each additional Supabase project costs $10/month for a dedicated Postgres instance — even if only Storage is used. PolyWiz doesn't need Supabase's database, auth, or edge functions. A project was created and tested before this was discovered.</td></tr>
+  <tr><td>S3 + CloudFront</td><td>Cheapest at massive scale, but overkill for campaign images. Complex setup (IAM, bucket policy, CORS, CloudFront distribution). The cost savings over Vercel Blob are literally cents per month at this volume.</td></tr>
+  <tr><td>Google Cloud</td><td>Competitive pricing but complex billing (gibibyte-hours). No advantage over S3 or Supabase. Asia-Pacific CDN costs 50-75% more.</td></tr>
+  <tr><td>Cloudinary</td><td>Excellent for on-the-fly transforms, but we pre-compress before upload. The credit system is opaque. $89-224/yr for features we don't need.</td></tr>
+  <tr><td>Zernio only</td><td>Fine for publish-destined images, but images are locked in Zernio's infrastructure. Can't serve for non-social uses (PDFs, emails, dashboard). No transforms. No data ownership.</td></tr>
+  <tr><td>Airtable refresh</td><td>Fragile. Depends on undocumented behavior (fresh URL per GET). 2-hour TTL is tight. Airtable discourages CDN use of attachment URLs. No transforms, no permanence.</td></tr>
+</table>
+
+<h2>Proposed Hybrid Approach</h2>
+
+<div class="callout callout-blue">
+  <strong>Layer 1: Vercel Blob (primary image store)</strong>
+  User-uploaded images are stored in Vercel Blob at upload time. The permanent public URL is stored in Airtable's <code>Image URL</code> field. Scraped web images keep their original URLs (they're already permanent and web-optimized).
+</div>
+
+<div class="callout callout-blue">
+  <strong>Layer 2: Zernio presign (publish-time optimization, optional)</strong>
+  At publish time, optionally re-upload to Zernio via presign for maximum reliability. Or just pass the Vercel Blob / original URL directly — both are permanent, so Zernio can fetch them anytime.
+</div>
+
+<p><strong>Implementation:</strong></p>
+<ol>
+  <li>Install <code>@vercel/blob</code> — simple <code>put()</code>/<code>del()</code> API</li>
+  <li>Add <code>lib/blob-storage.ts</code> utility (~30 lines: uploadImage, deleteImage, isBlobUrl)</li>
+  <li>At manual upload: compress client-side → upload to Vercel Blob → store permanent URL in Airtable</li>
+  <li>Scraped images: keep original URLs (already web-optimized, sub-200KB typical)</li>
+  <li>At publish time: pass URL to Zernio (permanent, no refresh needed)</li>
+  <li>The Airtable <code>Image Upload</code> attachment field becomes unnecessary for new uploads</li>
+</ol>
+
+<h2>Cost Impact Summary</h2>
+
+<div class="scorecard">
+  <div class="scorecard-item">
+    <h4>Current monthly cost</h4>
+    <div class="value">$0</div>
+    URL references only, no storage
+  </div>
+  <div class="scorecard-item">
+    <h4>With Vercel Blob</h4>
+    <div class="value" style="color: var(--green);">$0</div>
+    Within existing Vercel Pro plan limits
+  </div>
+  <div class="scorecard-item">
+    <h4>With Supabase Storage</h4>
+    <div class="value" style="color: var(--red);">$10/mo</div>
+    Per-project compute for unused Postgres
+  </div>
+  <div class="scorecard-item">
+    <h4>With S3 + CloudFront</h4>
+    <div class="value" style="color: var(--amber);">$15+/mo</div>
+    CloudFront flat rate
+  </div>
+</div>
+
+<footer>
+  <p>Generated 2026-03-29 for PolyWiz / Social Media Promo Scheduler<br>
+  Related: <a href="https://github.com/JuergenB/social-media-promo-scheduler/issues/63">Issue #63</a> |
+  <a href="https://github.com/JuergenB/social-media-promo-scheduler/issues/62">Issue #62</a> |
+  <a href="image-size-handling-report.html">Image Size Handling Report</a></p>
+</footer>
+
+</body>
+</html>

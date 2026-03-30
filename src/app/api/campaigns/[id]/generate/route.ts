@@ -669,7 +669,8 @@ export async function POST(
           // Claude selects from the numbered catalog (hero excluded).
           // imageIndex > 0 → catalogImages[imageIndex - 1]
           // imageIndex === 0 or missing → hero/og fallback
-          const heroFallback = heroUrl || "";
+          // User-uploaded hero (in campaign "Image URL") takes precedence over scraped og:image
+          const heroFallback = fields["Image URL"] || heroUrl || "";
 
           for (const post of result.posts) {
             const imgIdx = post.imageIndex ?? 0;

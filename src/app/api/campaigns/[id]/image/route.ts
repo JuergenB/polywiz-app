@@ -3,9 +3,9 @@ import { updateRecord, getRecord } from "@/lib/airtable/client";
 import { uploadImage, deleteImage, isBlobUrl } from "@/lib/blob-storage";
 
 /**
- * POST /api/posts/[id]/image
+ * POST /api/campaigns/[id]/image
  *
- * Upload an image file for a post. Accepts multipart/form-data with a "file" field.
+ * Upload a hero image for a campaign. Accepts multipart/form-data with a "file" field.
  * Stores the image permanently in Vercel Blob and updates the Airtable Image URL field.
  */
 export async function POST(
@@ -29,24 +29,21 @@ export async function POST(
     const contentType = file.type || "image/jpeg";
 
     // Delete previous Blob image if one exists
-    const existing = await getRecord<{ "Image URL": string }>("Posts", id);
+    const existing = await getRecord<{ "Image URL": string }>("Campaigns", id);
     const existingUrl = existing.fields["Image URL"];
     if (existingUrl && isBlobUrl(existingUrl)) {
       await deleteImage(existingUrl).catch(() => {});
     }
 
     // Upload to Vercel Blob
-    const imageUrl = await uploadImage("posts", id, buffer, contentType);
+    const imageUrl = await uploadImage("campaigns", id, buffer, contentType);
 
-    // Update Airtable Image URL with the permanent Blob URL
-    await updateRecord("Posts", id, { "Image URL": imageUrl });
+    // Update Airtable campaign record
+    await updateRecord("Campaigns", id, { "Image URL": imageUrl });
 
-    return NextResponse.json({
-      success: true,
-      imageUrl,
-    });
+    return NextResponse.json({ success: true, imageUrl });
   } catch (error) {
-    console.error("Failed to upload post image:", error);
+    console.error("Failed to upload campaign image:", error);
     return NextResponse.json(
       { error: "Failed to upload image" },
       { status: 500 }
@@ -55,9 +52,9 @@ export async function POST(
 }
 
 /**
- * DELETE /api/posts/[id]/image
+ * DELETE /api/campaigns/[id]/image
  *
- * Remove the image from a post.
+ * Remove the hero image from a campaign.
  */
 export async function DELETE(
   _request: NextRequest,
@@ -66,21 +63,20 @@ export async function DELETE(
   try {
     const { id } = await params;
 
-    // Delete from Vercel Blob if it's a Blob URL
-    const existing = await getRecord<{ "Image URL": string }>("Posts", id);
+    const existing = await getRecord<{ "Image URL": string }>("Campaigns", id);
     const existingUrl = existing.fields["Image URL"];
+
+    // Delete from Vercel Blob if it's a Blob URL
     if (existingUrl && isBlobUrl(existingUrl)) {
       await deleteImage(existingUrl).catch(() => {});
     }
 
-    await updateRecord("Posts", id, {
-      "Image URL": "",
-      "Image Upload": [],
-    });
+    // Clear Airtable field
+    await updateRecord("Campaigns", id, { "Image URL": "" });
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("Failed to remove post image:", error);
+    console.error("Failed to remove campaign image:", error);
     return NextResponse.json(
       { error: "Failed to remove image" },
       { status: 500 }

@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useUploadMedia, type UploadedMedia, isValidMediaType } from "@/hooks";
+import { compressImage, validateImage } from "@/lib/image-compression";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { Upload, X, Image as ImageIcon, Video, Loader2 } from "lucide-react";
@@ -37,10 +38,19 @@ export function MediaUploader({
         return;
       }
 
-      // Upload files
+      // Validate and compress images, then upload
       for (const file of fileArray) {
         try {
-          const uploaded = await uploadMutation.mutateAsync(file);
+          let prepared = file;
+          if (file.type.startsWith("image/")) {
+            const validation = validateImage(file);
+            if (!validation.valid) {
+              toast.error(validation.error);
+              continue;
+            }
+            prepared = await compressImage(file);
+          }
+          const uploaded = await uploadMutation.mutateAsync(prepared);
           onMediaChange([...media, uploaded]);
         } catch {
           toast.error(`Failed to upload ${file.name}`);
