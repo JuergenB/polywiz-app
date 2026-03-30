@@ -59,6 +59,7 @@ import {
   type PostStatus,
 } from "@/lib/airtable/types";
 import { toast } from "sonner";
+import { compressImage, validateImage } from "@/lib/image-compression";
 import {
   ArrowLeft,
   Calendar,
@@ -309,6 +310,69 @@ export default function CampaignDetailPage() {
     }
   };
 
+  // Hero image upload / paste URL
+  const [heroUploading, setHeroUploading] = useState(false);
+  const [heroUrlInput, setHeroUrlInput] = useState("");
+  const [showHeroUrlInput, setShowHeroUrlInput] = useState(false);
+
+  const setHeroImageUrl = async (url: string) => {
+    if (!campaignId || !url.trim()) return;
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageUrl: url.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed to set hero image URL");
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      setHeroUrlInput("");
+      setShowHeroUrlInput(false);
+      toast.success("Hero image updated");
+    } catch {
+      toast.error("Failed to set hero image URL");
+    }
+  };
+
+  const uploadHeroImage = async (file: File) => {
+    if (!campaignId) return;
+    const validation = validateImage(file);
+    if (!validation.valid) {
+      toast.error(validation.error);
+      return;
+    }
+    setHeroUploading(true);
+    try {
+      const compressed = await compressImage(file);
+      const formData = new FormData();
+      formData.append("file", compressed);
+      const res = await fetch(`/api/campaigns/${campaignId}/image`, {
+        method: "POST",
+        body: formData,
+      });
+      if (!res.ok) throw new Error("Failed to upload hero image");
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      toast.success("Hero image updated");
+    } catch {
+      toast.error("Failed to upload hero image");
+    } finally {
+      setHeroUploading(false);
+    }
+  };
+
+  const removeHeroImage = async () => {
+    if (!campaignId) return;
+    try {
+      const res = await fetch(`/api/campaigns/${campaignId}/image`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("Failed to remove hero image");
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      toast.success("Hero image removed");
+    } catch {
+      toast.error("Failed to remove hero image");
+    }
+  };
+
   // All unique platforms across posts
   const allPlatforms = useMemo(() => {
     const platforms = new Set<string>();
@@ -531,20 +595,86 @@ export default function CampaignDetailPage() {
 
       {/* Header card */}
       <Card className="overflow-hidden !py-0 !gap-0">
-        {/* Banner image */}
-        {campaign.imageUrl ? (
-          <div className="h-44 overflow-hidden bg-muted">
-            <img
-              src={campaign.imageUrl}
-              alt=""
-              className="w-full h-full object-cover"
-            />
-          </div>
-        ) : (
-          <div className="h-24 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
-            <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
-          </div>
-        )}
+        {/* Banner image with upload overlay */}
+        <div className="relative group">
+          {campaign.imageUrl ? (
+            <div className="h-44 overflow-hidden bg-muted">
+              <img
+                src={campaign.imageUrl}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            </div>
+          ) : (
+            <div className="h-24 bg-gradient-to-br from-zinc-100 to-zinc-200 dark:from-zinc-800 dark:to-zinc-900 flex items-center justify-center">
+              <TypeIcon className="h-10 w-10 text-muted-foreground/30" />
+            </div>
+          )}
+          {/* Upload / paste URL overlay */}
+          {showHeroUrlInput ? (
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50 px-8">
+              <div className="flex w-full max-w-md gap-2" onClick={(e) => e.stopPropagation()}>
+                <Input
+                  type="url"
+                  placeholder="Paste image URL..."
+                  value={heroUrlInput}
+                  onChange={(e) => setHeroUrlInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") setHeroImageUrl(heroUrlInput);
+                    if (e.key === "Escape") { setShowHeroUrlInput(false); setHeroUrlInput(""); }
+                  }}
+                  className="bg-white text-zinc-900 text-sm h-8"
+                  autoFocus
+                />
+                <Button size="sm" variant="secondary" className="h-8 shrink-0" onClick={() => setHeroImageUrl(heroUrlInput)} disabled={!heroUrlInput.trim()}>
+                  Set
+                </Button>
+                <Button size="sm" variant="ghost" className="h-8 shrink-0 text-white hover:text-white hover:bg-white/20" onClick={() => { setShowHeroUrlInput(false); setHeroUrlInput(""); }}>
+                  <X className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/0 group-hover:bg-black/40 transition-colors">
+              <label className="cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity">
+                <input
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  disabled={heroUploading}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) uploadHeroImage(file);
+                    e.target.value = "";
+                  }}
+                />
+                <span className="inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white transition-colors">
+                  {heroUploading ? (
+                    <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading...</>
+                  ) : (
+                    <><Upload className="h-3.5 w-3.5" /> {campaign.imageUrl ? "Change" : "Upload"}</>
+                  )}
+                </span>
+              </label>
+              {!heroUploading && (
+                <button
+                  onClick={() => setShowHeroUrlInput(true)}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-white/90 px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-white"
+                >
+                  <Link2 className="h-3.5 w-3.5" /> Paste URL
+                </button>
+              )}
+              {campaign.imageUrl && !heroUploading && (
+                <button
+                  onClick={removeHeroImage}
+                  className="opacity-0 group-hover:opacity-100 transition-opacity inline-flex items-center gap-1.5 rounded-md bg-red-500/90 px-3 py-1.5 text-xs font-medium text-white hover:bg-red-500"
+                >
+                  <Trash2 className="h-3.5 w-3.5" /> Remove
+                </button>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="px-5 py-4 space-y-3">
           {/* Title row */}
@@ -1373,8 +1503,11 @@ function PostDetailView({
 
   const uploadImageMutation = useMutation({
     mutationFn: async (file: File) => {
+      const validation = validateImage(file);
+      if (!validation.valid) throw new Error(validation.error);
+      const compressed = await compressImage(file);
       const formData = new FormData();
-      formData.append("file", file);
+      formData.append("file", compressed);
       const res = await fetch(`/api/posts/${post.id}/image`, {
         method: "POST",
         body: formData,
@@ -1680,24 +1813,32 @@ function PostDetailView({
               onDragLeave={() => setIsDragging(false)}
             >
               <div className="text-center py-3">
-                <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
-                <p className="text-sm text-muted-foreground">
-                  {uploadImageMutation.isPending ? "Uploading..." : "Drag & drop an image"}
-                </p>
-                <label className="inline-block mt-1">
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) uploadImageMutation.mutate(file);
-                    }}
-                  />
-                  <span className="text-xs text-primary hover:underline cursor-pointer">
-                    Browse files
-                  </span>
-                </label>
+                {uploadImageMutation.isPending ? (
+                  <>
+                    <Loader2 className="h-6 w-6 mx-auto text-primary mb-1 animate-spin" />
+                    <p className="text-sm text-muted-foreground">Compressing & uploading...</p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
+                    <p className="text-sm text-muted-foreground">Drag & drop an image</p>
+                    <label className="inline-block mt-1">
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        disabled={uploadImageMutation.isPending}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file) uploadImageMutation.mutate(file);
+                        }}
+                      />
+                      <span className="text-xs text-primary hover:underline cursor-pointer">
+                        Browse files
+                      </span>
+                    </label>
+                  </>
+                )}
               </div>
               <div className="flex gap-2">
                 <Input
@@ -1830,8 +1971,38 @@ function PostDetailView({
       {/* Image lightbox — inside dialog but outside scroll area */}
       {mediaImages.length > 0 && lightboxOpen && (
         <div
-          className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center rounded-lg"
+          className="absolute inset-0 z-50 bg-black/90 flex items-center justify-center rounded-lg select-none"
+          tabIndex={0}
+          ref={(el) => el?.focus()}
           onClick={() => setLightboxOpen(false)}
+          onKeyDown={(e) => {
+            if (mediaImages.length <= 1) return;
+            if (e.key === "ArrowLeft") {
+              e.stopPropagation();
+              setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
+            } else if (e.key === "ArrowRight") {
+              e.stopPropagation();
+              setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
+            } else if (e.key === "Escape") {
+              setLightboxOpen(false);
+            }
+          }}
+          onTouchStart={(e) => {
+            const touch = e.touches[0];
+            (e.currentTarget as HTMLElement).dataset.touchX = String(touch.clientX);
+          }}
+          onTouchEnd={(e) => {
+            const startX = Number((e.currentTarget as HTMLElement).dataset.touchX);
+            const endX = e.changedTouches[0].clientX;
+            const diff = startX - endX;
+            if (Math.abs(diff) < 50 || mediaImages.length <= 1) return;
+            e.stopPropagation();
+            if (diff > 0) {
+              setLightboxIndex((i) => (i < mediaImages.length - 1 ? i + 1 : 0));
+            } else {
+              setLightboxIndex((i) => (i > 0 ? i - 1 : mediaImages.length - 1));
+            }
+          }}
         >
           {/* Close */}
           <button
@@ -1874,6 +2045,7 @@ function PostDetailView({
             alt=""
             className="max-w-[90%] max-h-[80%] object-contain rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
+            draggable={false}
           />
         </div>
       )}

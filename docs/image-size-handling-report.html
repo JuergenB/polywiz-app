@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Image Size Handling Report — PolyWiz</title>
+<style>
+  :root { --blue: #2563eb; --red: #dc2626; --green: #16a34a; --amber: #d97706; --gray: #6b7280; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; max-width: 860px; margin: 0 auto; padding: 2rem; line-height: 1.6; color: #1f2937; background: #fafafa; }
+  h1 { border-bottom: 3px solid var(--blue); padding-bottom: 0.5rem; }
+  h2 { color: var(--blue); margin-top: 2rem; }
+  h3 { color: #374151; }
+  .callout { border-left: 4px solid; padding: 1rem 1.25rem; margin: 1.5rem 0; border-radius: 0 8px 8px 0; }
+  .callout-red { border-color: var(--red); background: #fef2f2; }
+  .callout-green { border-color: var(--green); background: #f0fdf4; }
+  .callout-amber { border-color: var(--amber); background: #fffbeb; }
+  .callout-blue { border-color: var(--blue); background: #eff6ff; }
+  .callout strong { display: block; margin-bottom: 0.25rem; }
+  table { border-collapse: collapse; width: 100%; margin: 1rem 0; }
+  th, td { border: 1px solid #d1d5db; padding: 0.5rem 0.75rem; text-align: left; }
+  th { background: #f3f4f6; font-weight: 600; }
+  code { background: #f3f4f6; padding: 0.15em 0.4em; border-radius: 4px; font-size: 0.9em; }
+  .file-ref { font-family: monospace; font-size: 0.85em; color: var(--gray); }
+  .badge { display: inline-block; padding: 0.15em 0.6em; border-radius: 9999px; font-size: 0.8em; font-weight: 600; }
+  .badge-red { background: #fee2e2; color: var(--red); }
+  .badge-green { background: #dcfce7; color: var(--green); }
+  .badge-amber { background: #fef3c7; color: var(--amber); }
+  .verdict { font-size: 1.1em; font-weight: 600; }
+  footer { margin-top: 3rem; padding-top: 1rem; border-top: 1px solid #e5e7eb; color: var(--gray); font-size: 0.85em; }
+</style>
+</head>
+<body>
+
+<h1>Image Size Handling Report</h1>
+<p><strong>Date:</strong> 2026-03-29 &nbsp;|&nbsp; <strong>Related:</strong> <a href="https://github.com/JuergenB/social-media-promo-scheduler/issues/62">GitHub Issue #62</a></p>
+
+<h2>TL;DR</h2>
+
+<div class="callout callout-red">
+  <strong>Airtable does NOT compress images.</strong>
+  A 5-6MB image is stored byte-for-byte at full resolution. The assumption that Airtable auto-reduces file size is incorrect. However, the code currently reads back the <code>thumbnails.large</code> URL (a resized version), not the original — so in practice, published images are smaller than what was uploaded, but this is accidental and causes quality loss.
+</div>
+
+<div class="callout callout-green">
+  <strong>Zernio DOES compress at publish time.</strong>
+  Zernio applies per-platform compression server-side (Sharp for images, FFmpeg for video) before uploading to social platforms. So even oversized images won't fail at the social platform — they'll just be compressed by Zernio.
+</div>
+
+<div class="callout callout-amber">
+  <strong>The real problem: no size validation exists anywhere in the upload path.</strong>
+  A 5-6MB file upload will silently fail due to the Next.js 4MB body limit, or succeed but get degraded to a thumbnail. The user gets no meaningful error message.
+</div>
+
+<h2>1. Does Airtable Compress Images?</h2>
+
+<p class="verdict">No. Airtable stores originals at full resolution.</p>
+
+<table>
+  <tr><th>Aspect</th><th>Behavior</th></tr>
+  <tr><td>Original file</td><td>Stored exactly as uploaded, no compression, no resizing</td></tr>
+  <tr><td>Thumbnails</td><td>Airtable generates <code>small</code> and <code>large</code> thumbnail renderings for UI display — these are separate files, not modifications of the original</td></tr>
+  <tr><td>File size limit</td><td>5GB per file (1GB on Free plan)</td></tr>
+  <tr><td>Base storage quota</td><td>Free: 1GB, Team: 20GB, Business: 100GB, Enterprise: 1TB</td></tr>
+  <tr><td>Copy-paste caveat</td><td>Copying between attachment fields can reference thumbnails instead of originals, causing quality loss</td></tr>
+</table>
+
+<p><strong>What this means for PolyWiz:</strong> If someone uploads a 6MB photo to a post's Image Upload field, Airtable stores the full 6MB. But our code on line 51 of <code>/api/posts/[id]/image/route.ts</code> reads back <code>thumbnails.large.url</code> instead of <code>attachment.url</code> — so the Image URL field gets a resized thumbnail, not the original. This is both a hidden quality loss and a hidden size reduction.</p>
+
+<h2>2. Current Size Handling in the Codebase</h2>
+
+<table>
+  <tr><th>Component</th><th>Size Check?</th><th>What Happens</th></tr>
+  <tr>
+    <td>Post image upload API<br><span class="file-ref">src/app/api/posts/[id]/image/route.ts</span></td>
+    <td><span class="badge badge-red">None</span></td>
+    <td>Converts entire file to base64 in memory (33% bloat), sends to Airtable. No size validation.</td>
+  </tr>
+  <tr>
+    <td>Campaign detail drag-and-drop<br><span class="file-ref">src/app/dashboard/campaigns/[id]/page.tsx</span></td>
+    <td><span class="badge badge-red">None</span></td>
+    <td>Filters by MIME type only (<code>image/*</code>). Passes file directly to upload mutation. <code>getMaxFileSize()</code> exists but is never called here.</td>
+  </tr>
+  <tr>
+    <td>Compose page uploader<br><span class="file-ref">src/app/dashboard/compose/...media-uploader.tsx</span></td>
+    <td><span class="badge badge-red">None</span></td>
+    <td>Validates MIME type via <code>isValidMediaType()</code> but does not check file size. Uses Zernio presign path.</td>
+  </tr>
+  <tr>
+    <td>Firecrawl scraper<br><span class="file-ref">src/lib/firecrawl.ts</span></td>
+    <td><span class="badge badge-amber">URL-based only</span></td>
+    <td>Filters thumbnails by URL dimension patterns. Never downloads to check byte size.</td>
+  </tr>
+  <tr>
+    <td>Next.js body limit<br><span class="file-ref">next.config.ts</span></td>
+    <td><span class="badge badge-amber">Implicit 4MB</span></td>
+    <td>No explicit config. App Router default is 4MB for <code>request.formData()</code>. This is the only gate — but it produces a cryptic error, not a user-friendly message.</td>
+  </tr>
+  <tr>
+    <td>Utility functions<br><span class="file-ref">src/hooks/use-media.ts</span></td>
+    <td><span class="badge badge-green">Defined</span></td>
+    <td><code>getMaxFileSize("image")</code> returns 10MB. <code>isValidMediaType()</code> checks MIME types. Both exist but are <strong>not used</strong> in the campaign/post upload flows.</td>
+  </tr>
+</table>
+
+<h2>3. What Happens Today With a 5-6MB Image?</h2>
+
+<h3>Scenario A: File upload via campaign detail page</h3>
+<ol>
+  <li>5MB file is read into memory</li>
+  <li>Base64 encoding bloats it to ~6.7MB</li>
+  <li>Next.js 4MB body limit <strong>rejects the request</strong> (413 or silent truncation)</li>
+  <li>User sees "Failed to upload image" with no explanation</li>
+  <li><strong>Result: silent failure</strong></li>
+</ol>
+
+<h3>Scenario B: File just under 4MB (e.g., 3MB original = 4MB base64)</h3>
+<ol>
+  <li>Passes the Next.js body limit</li>
+  <li>Airtable stores the full 3MB original</li>
+  <li>Code reads back <code>thumbnails.large.url</code> — a resized version</li>
+  <li>Publish sends thumbnail URL to Zernio</li>
+  <li><strong>Result: works, but quality degraded by thumbnail extraction</strong></li>
+</ol>
+
+<h3>Scenario C: URL pasted (not uploaded)</h3>
+<ol>
+  <li>No upload occurs — just a URL string stored</li>
+  <li>At publish time, Zernio fetches the URL directly</li>
+  <li>Zernio applies per-platform compression if needed</li>
+  <li><strong>Result: works correctly at any image size</strong></li>
+</ol>
+
+<h2>4. Zernio's Per-Platform Compression</h2>
+
+<p>Zernio automatically compresses images exceeding platform-specific limits during publishing:</p>
+
+<table>
+  <tr><th>Platform</th><th>Compression Threshold</th></tr>
+  <tr><td>Bluesky</td><td>&gt; 1 MB</td></tr>
+  <tr><td>Twitter / X</td><td>&gt; 5 MB</td></tr>
+  <tr><td>Instagram</td><td>&gt; 8 MB</td></tr>
+  <tr><td>Threads</td><td>&gt; 8 MB</td></tr>
+  <tr><td>Facebook</td><td>&gt; 10 MB</td></tr>
+  <tr><td>LinkedIn</td><td>&gt; 8 MB</td></tr>
+  <tr><td>Pinterest</td><td>&gt; 32 MB</td></tr>
+  <tr><td>TikTok</td><td>&gt; 20 MB</td></tr>
+</table>
+
+<p>Compression uses Sharp (images) and FFmpeg (video) server-side. Original files are preserved; compressed versions are created for the social platform upload only.</p>
+
+<h2>5. Zernio Presign Limits</h2>
+
+<p>The <code>POST /v1/media/presign</code> endpoint supports files up to <strong>5GB</strong>. Since this uploads directly to cloud storage (bypassing the Next.js server), there is no body size limit concern. This is the path used by the compose page but <strong>not</strong> by the campaign/post image upload flows.</p>
+
+<h2>6. Recommendations</h2>
+
+<div class="callout callout-blue">
+  <strong>Priority 1 — Wire up existing size validation (quick fix)</strong>
+  <code>getMaxFileSize()</code> and <code>isValidMediaType()</code> already exist in <code>use-media.ts</code>. Add client-side checks before <code>uploadImageMutation.mutate()</code> in the campaign detail page. Set practical limit at <strong>4MB</strong> (not the 10MB the utility defines) to account for base64 bloat. Show a clear error: "Image must be under 4MB."
+</div>
+
+<div class="callout callout-blue">
+  <strong>Priority 2 — Fix thumbnail quality loss</strong>
+  In <code>/api/posts/[id]/image/route.ts</code> line 51, change <code>attachment?.thumbnails?.large?.url || attachment?.url</code> to <code>attachment?.url || attachment?.thumbnails?.large?.url</code>. The current order prefers the thumbnail over the original, causing unnecessary quality degradation.
+</div>
+
+<div class="callout callout-blue">
+  <strong>Priority 3 — Switch to Zernio presign for all image uploads (medium-term, aligns with Issue #62)</strong>
+  Replace the Airtable base64 upload path with Zernio's presign flow. This eliminates the 4MB body limit, produces permanent URLs (no Airtable expiration), and lets Zernio handle per-platform compression. The infrastructure already exists in <code>use-media.ts</code>.
+</div>
+
+<footer>
+  <p>Generated 2026-03-29 for PolyWiz / Social Media Promo Scheduler<br>
+  See also: <a href="https://github.com/JuergenB/social-media-promo-scheduler/issues/62">Issue #62 — Campaign hero image: custom upload with permanent hosting</a></p>
+</footer>
+
+</body>
+</html>
