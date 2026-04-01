@@ -98,6 +98,8 @@ import {
   Layers,
   Link2Off,
   Send,
+  Pipette,
+  Eraser,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -1696,6 +1698,94 @@ function PostDetailView({
     setOptimizePreview(null);
   };
 
+  // Carousel slide generation (Instagram framed slides with captions)
+  // Per-slide options: frameColor (eyedropper-picked), removeColor (chroma key)
+  type SlideOpt = { frameColor?: { r: number; g: number; b: number }; removeColor?: { r: number; g: number; b: number }; removeTolerance?: number };
+  const [carouselPreviews, setCarouselPreviews] = useState<Array<{ dataUri: string; caption: string; frameColor: { r: number; g: number; b: number } }> | null>(null);
+  const [perSlideOptions, setPerSlideOptions] = useState<(SlideOpt | undefined)[]>([]);
+  const [eyedropperMode, setEyedropperMode] = useState<{ slideIndex: number; mode: "frame" | "removeBg" } | null>(null);
+  const canGenerateSlides = (platformLower === "instagram" || platformLower === "linkedin") && mediaImages.length >= 2 && mediaItems.some((m) => m.caption);
+
+  // Get pixel color from a click on the rendered preview image
+  const getPixelColor = (e: React.MouseEvent<HTMLImageElement>): { r: number; g: number; b: number } | null => {
+    const img = e.currentTarget;
+    const rect = img.getBoundingClientRect();
+    const x = Math.round((e.clientX - rect.left) / rect.width * img.naturalWidth);
+    const y = Math.round((e.clientY - rect.top) / rect.height * img.naturalHeight);
+    const canvas = document.createElement("canvas");
+    canvas.width = img.naturalWidth;
+    canvas.height = img.naturalHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return null;
+    ctx.drawImage(img, 0, 0);
+    const pixel = ctx.getImageData(x, y, 1, 1).data;
+    return { r: pixel[0], g: pixel[1], b: pixel[2] };
+  };
+
+  const handleSlideClick = (e: React.MouseEvent<HTMLImageElement>, slideIndex: number) => {
+    if (!eyedropperMode || eyedropperMode.slideIndex !== slideIndex) return;
+    e.stopPropagation();
+    const color = getPixelColor(e);
+    if (!color) return;
+
+    const newOptions = [...perSlideOptions];
+    const existing = newOptions[slideIndex] || {};
+
+    if (eyedropperMode.mode === "frame") {
+      newOptions[slideIndex] = { ...existing, frameColor: color };
+    } else {
+      newOptions[slideIndex] = { ...existing, removeColor: color, removeTolerance: 50 };
+    }
+
+    setPerSlideOptions(newOptions);
+    setEyedropperMode(null);
+    // Re-render with updated options
+    carouselPreviewMutation.mutate(newOptions);
+  };
+
+  const carouselPreviewMutation = useMutation({
+    mutationFn: async (slideOpts?: (SlideOpt | undefined)[]) => {
+      const res = await fetch(`/api/posts/${post.id}/carousel-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apply: false, slideOptions: slideOpts }),
+      });
+      if (!res.ok) throw new Error("Failed to generate carousel preview");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const previews = data.previews.map((p: { dataUri: string; caption: string; frameColor: { r: number; g: number; b: number } }) => ({
+        dataUri: p.dataUri,
+        caption: p.caption,
+        frameColor: p.frameColor,
+      }));
+      setCarouselPreviews(previews);
+    },
+    onError: (err) => toast.error(`Carousel preview failed: ${err.message}`),
+  });
+
+  const carouselApplyMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/posts/${post.id}/carousel-preview`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ apply: true, slideOptions: perSlideOptions }),
+      });
+      if (!res.ok) throw new Error("Failed to apply carousel slides");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      const newItems: MediaItem[] = data.mediaItems;
+      setMediaItems(newItems);
+      setCarouselPreviews(null);
+      setPerSlideOptions([]);
+      setEyedropperMode(null);
+      queryClient.invalidateQueries({ queryKey: ["campaign"] });
+      toast.success(`${newItems.length} carousel slides applied`);
+    },
+    onError: (err) => toast.error(`Apply failed: ${err.message}`),
+  });
+
   const addImageUrl = (url: string) => {
     const next = [...mediaItems, { url, caption: "" }];
     setMediaItems(next);
@@ -2074,21 +2164,22 @@ function PostDetailView({
 
           {/* Always-visible action bar — hidden for published posts */}
           {!isPublished && (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
-              className="text-xs"
+              className="text-xs h-7 px-2"
               onClick={() => setShowAddImage(!showAddImage)}
+              title={mediaImages.length === 0 ? "Add image" : "Add more images"}
             >
               <Plus className="h-3 w-3 mr-1" />
-              {mediaImages.length === 0 ? "Add image" : "Add more images"}
+              Add
             </Button>
             {mediaImages.length === 1 && (
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-muted-foreground"
+                className="text-xs text-muted-foreground h-7 px-2"
                 onClick={() => {
                   removeImage(0);
                   setShowAddImage(true);
@@ -2102,15 +2193,31 @@ function PostDetailView({
               <Button
                 variant="ghost"
                 size="sm"
-                className="text-xs text-muted-foreground"
+                className="text-xs text-muted-foreground h-7 px-2"
                 onClick={() => optimizeMutation.mutate(0)}
                 disabled={optimizeMutation.isPending}
                 title={optimizeTooltip}
               >
                 {optimizeMutation.isPending ? (
-                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Optimizing ({optimizeTarget.label})...</>
+                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Optimizing...</>
                 ) : (
-                  <><Sparkles className="h-3 w-3 mr-1" /> Optimize ({optimizeTarget.label})</>
+                  <><Sparkles className="h-3 w-3 mr-1" /> {optimizeTarget.label}</>
+                )}
+              </Button>
+            )}
+            {canGenerateSlides && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7 px-2"
+                onClick={() => { setPerSlideOptions([]); carouselPreviewMutation.mutate(undefined); }}
+                disabled={carouselPreviewMutation.isPending}
+                title="Generate framed carousel slides with captions (4:5 portrait)"
+              >
+                {carouselPreviewMutation.isPending ? (
+                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Generating...</>
+                ) : (
+                  <><Layers className="h-3 w-3 mr-1" /> Slides</>
                 )}
               </Button>
             )}
@@ -2362,6 +2469,138 @@ function PostDetailView({
                 {lightboxIndex + 1} / {mediaImages.length}
               </span>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Carousel slide preview modal */}
+      {carouselPreviews && (
+        <div className="absolute inset-0 z-[60] bg-black/90 flex flex-col rounded-lg select-none">
+          <div className="flex items-center justify-between px-6 py-3 shrink-0">
+            <div className="flex items-center gap-2">
+              <Layers className="h-4 w-4 text-white/70" />
+              <span className="text-white font-medium text-sm">Carousel Preview — {carouselPreviews.length} slides ({platformLower === "linkedin" ? "1:1" : "4:5"})</span>
+              {eyedropperMode && (
+                <span className="text-amber-400 text-xs animate-pulse ml-2">
+                  {eyedropperMode.mode === "frame" ? "Click slide to pick frame color" : "Click background color to remove"}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-white/70 hover:text-white hover:bg-white/10"
+                onClick={() => { setCarouselPreviews(null); setEyedropperMode(null); setPerSlideOptions([]); }}
+                disabled={carouselApplyMutation.isPending}
+              >
+                Cancel
+              </Button>
+              <Button
+                size="sm"
+                className="bg-white text-black hover:bg-white/90"
+                onClick={() => carouselApplyMutation.mutate()}
+                disabled={carouselApplyMutation.isPending || carouselPreviewMutation.isPending}
+              >
+                {carouselApplyMutation.isPending ? (
+                  <><Loader2 className="h-3 w-3 mr-1 animate-spin" /> Applying...</>
+                ) : (
+                  "Apply Slides"
+                )}
+              </Button>
+            </div>
+          </div>
+          <div className="flex-1 overflow-x-auto overflow-y-hidden px-6 pb-4">
+            <div className="flex gap-4 h-full items-center">
+              {carouselPreviews.map((slide, idx) => (
+                <div key={idx} className="shrink-0 flex flex-col items-center gap-2">
+                  <div className="relative rounded-lg overflow-hidden shadow-2xl" style={{ aspectRatio: platformLower === "linkedin" ? "1/1" : "4/5", height: "min(70vh, 500px)" }}>
+                    <img
+                      src={slide.dataUri}
+                      alt={slide.caption || `Slide ${idx + 1}`}
+                      crossOrigin="anonymous"
+                      className={cn(
+                        "h-full w-full object-contain",
+                        carouselPreviewMutation.isPending && "opacity-50",
+                        eyedropperMode?.slideIndex === idx && "cursor-crosshair"
+                      )}
+                      onClick={(e) => handleSlideClick(e, idx)}
+                    />
+                    {/* Eyedropper tools */}
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEyedropperMode(
+                            eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "frame"
+                              ? null
+                              : { slideIndex: idx, mode: "frame" }
+                          );
+                        }}
+                        disabled={carouselPreviewMutation.isPending}
+                        className={cn(
+                          "flex items-center gap-1 text-white text-[10px] px-2 py-1 rounded-full transition-colors",
+                          eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "frame"
+                            ? "bg-amber-500/90"
+                            : "bg-black/60 hover:bg-black/80"
+                        )}
+                        title="Pick frame color from image"
+                      >
+                        <Pipette className="h-3 w-3" /> Color
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEyedropperMode(
+                            eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "removeBg"
+                              ? null
+                              : { slideIndex: idx, mode: "removeBg" }
+                          );
+                        }}
+                        disabled={carouselPreviewMutation.isPending}
+                        className={cn(
+                          "flex items-center gap-1 text-white text-[10px] px-2 py-1 rounded-full transition-colors",
+                          eyedropperMode?.slideIndex === idx && eyedropperMode.mode === "removeBg"
+                            ? "bg-amber-500/90"
+                            : "bg-black/60 hover:bg-black/80"
+                        )}
+                        title="Click background color to remove it"
+                      >
+                        <Eraser className="h-3 w-3" /> Remove BG
+                      </button>
+                      {perSlideOptions[idx] && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const newOptions = [...perSlideOptions];
+                            newOptions[idx] = undefined;
+                            setPerSlideOptions(newOptions);
+                            carouselPreviewMutation.mutate(newOptions);
+                          }}
+                          disabled={carouselPreviewMutation.isPending}
+                          className="flex items-center gap-1 bg-black/60 hover:bg-black/80 text-white text-[10px] px-2 py-1 rounded-full transition-colors"
+                          title="Reset to auto-detected colors"
+                        >
+                          <RotateCcw className="h-3 w-3" />
+                        </button>
+                      )}
+                    </div>
+                    {/* Frame color swatch */}
+                    {slide.frameColor && (
+                      <div
+                        className="absolute bottom-2 left-2 w-4 h-4 rounded-full border-2 border-white/50 shadow"
+                        style={{ backgroundColor: `rgb(${slide.frameColor.r},${slide.frameColor.g},${slide.frameColor.b})` }}
+                        title={`Frame: rgb(${slide.frameColor.r}, ${slide.frameColor.g}, ${slide.frameColor.b})`}
+                      />
+                    )}
+                  </div>
+                  <span className="text-white/60 text-xs">
+                    {idx + 1}/{carouselPreviews.length}
+                    {slide.caption && ` — ${slide.caption.length > 40 ? slide.caption.slice(0, 40) + "…" : slide.caption}`}
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
