@@ -1,19 +1,13 @@
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { MediaItem } from "@/lib/media-items";
 
-const CAPTION_BAR_HEIGHT = 48;
-const CAPTION_FONT_SIZE = 16;
-const CAPTION_PADDING = 16;
-
 /**
  * Assemble multiple images into a PDF document for LinkedIn carousel posts.
  *
  * Each image becomes one full-bleed page. If a caption is provided,
- * a dark gradient bar with white text is rendered at the bottom of the page.
- *
- * Accepts either:
- *   - MediaItem[] (with captions)
- *   - string[] (URLs only, backward compatible)
+ * a dark bar with white centered text (up to 2 lines, word-wrapped) is
+ * rendered at the bottom of the page. Font size and bar height scale
+ * proportionally to the image dimensions.
  */
 export async function assembleCarouselPDF(
   items: MediaItem[] | string[]
@@ -50,49 +44,58 @@ export async function assembleCarouselPDF(
     }
 
     const pageWidth = image.width;
-    const pageHeight = item.caption
-      ? image.height + CAPTION_BAR_HEIGHT
-      : image.height;
+
+    if (!item.caption) {
+      // No caption — full-bleed image only
+      const page = pdfDoc.addPage([pageWidth, image.height]);
+      page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
+      continue;
+    }
+
+    // --- Proportional caption sizing ---
+    const fontSize = Math.round(pageWidth * 0.012);
+    const clampedFontSize = Math.max(14, Math.min(fontSize, 36));
+    const lineHeight = clampedFontSize * 1.35;
+    const padding = Math.round(pageWidth * 0.03);
+    const maxTextWidth = pageWidth - padding * 2;
+    const textFont = item.caption.length > 60 ? font : fontBold;
+
+    // Word-wrap to max 2 lines
+    const lines = wordWrap(item.caption, textFont, clampedFontSize, maxTextWidth, 2);
+
+    const barHeight = Math.round(lineHeight * lines.length + padding * 1.2);
+    const pageHeight = image.height + barHeight;
 
     const page = pdfDoc.addPage([pageWidth, pageHeight]);
 
-    // Draw image (positioned at top when caption present, full page when not)
+    // Draw image at top
     page.drawImage(image, {
       x: 0,
-      y: item.caption ? CAPTION_BAR_HEIGHT : 0,
+      y: barHeight,
       width: image.width,
       height: image.height,
     });
 
-    // Draw caption bar at bottom
-    if (item.caption) {
-      // Dark background bar
-      page.drawRectangle({
-        x: 0,
-        y: 0,
-        width: pageWidth,
-        height: CAPTION_BAR_HEIGHT,
-        color: rgb(0.12, 0.12, 0.12),
-      });
+    // Dark background bar
+    page.drawRectangle({
+      x: 0,
+      y: 0,
+      width: pageWidth,
+      height: barHeight,
+      color: rgb(0.12, 0.12, 0.12),
+    });
 
-      // Truncate caption to fit width
-      const maxWidth = pageWidth - CAPTION_PADDING * 2;
-      let displayText = item.caption;
-      const textFont = displayText.length > 60 ? font : fontBold;
-      const fontSize = displayText.length > 80 ? CAPTION_FONT_SIZE - 2 : CAPTION_FONT_SIZE;
+    // Draw each line centered
+    for (let i = 0; i < lines.length; i++) {
+      const textWidth = textFont.widthOfTextAtSize(lines[i], clampedFontSize);
+      const textX = (pageWidth - textWidth) / 2;
+      // First line at top of bar, last line at bottom
+      const textY = barHeight - padding * 0.6 - lineHeight * (i + 1) + lineHeight * 0.35;
 
-      while (textFont.widthOfTextAtSize(displayText, fontSize) > maxWidth && displayText.length > 3) {
-        displayText = displayText.slice(0, -4) + "...";
-      }
-
-      const textWidth = textFont.widthOfTextAtSize(displayText, fontSize);
-      const textX = (pageWidth - textWidth) / 2; // center
-      const textY = (CAPTION_BAR_HEIGHT - fontSize) / 2;
-
-      page.drawText(displayText, {
+      page.drawText(lines[i], {
         x: textX,
         y: textY,
-        size: fontSize,
+        size: clampedFontSize,
         font: textFont,
         color: rgb(1, 1, 1),
       });
@@ -104,4 +107,56 @@ export async function assembleCarouselPDF(
   }
 
   return Buffer.from(await pdfDoc.save());
+}
+
+/**
+ * Word-wrap text into up to `maxLines` lines that fit within `maxWidth`.
+ * Truncates with ellipsis if the text doesn't fit in the allowed lines.
+ */
+function wordWrap(
+  text: string,
+  pdfFont: { widthOfTextAtSize: (t: string, s: number) => number },
+  fontSize: number,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (pdfFont.widthOfTextAtSize(candidate, fontSize) <= maxWidth) {
+      currentLine = candidate;
+    } else {
+      if (currentLine) {
+        lines.push(currentLine);
+        if (lines.length >= maxLines) break;
+      }
+      currentLine = word;
+    }
+  }
+
+  if (currentLine && lines.length < maxLines) {
+    lines.push(currentLine);
+  }
+
+  // If we ran out of lines but have remaining text, truncate the last line
+  if (lines.length === maxLines) {
+    const remainingWords = words.slice(
+      words.indexOf(currentLine) !== -1 ? words.indexOf(currentLine) : words.length
+    );
+    // Check if there's text we didn't fit
+    const allFitted = lines.join(" ").split(/\s+/).length >= words.length;
+    if (!allFitted) {
+      let lastLine = lines[maxLines - 1];
+      // Add remaining words that fit, then ellipsis
+      while (pdfFont.widthOfTextAtSize(lastLine + "…", fontSize) > maxWidth && lastLine.length > 3) {
+        lastLine = lastLine.replace(/\s+\S+$/, "");
+      }
+      lines[maxLines - 1] = lastLine + "…";
+    }
+  }
+
+  return lines.length > 0 ? lines : [text.slice(0, 20) + "…"];
 }

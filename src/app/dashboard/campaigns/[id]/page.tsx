@@ -2341,20 +2341,28 @@ function PostDetailView({
               >
                 <ArrowLeft className="h-5 w-5 rotate-180" />
               </button>
-              <span className="absolute bottom-4 left-1/2 -translate-x-1/2 text-white text-sm font-medium bg-black/50 px-3 py-1 rounded-full">
-                {lightboxIndex + 1} / {mediaImages.length}
-              </span>
             </>
           )}
 
-          {/* Image */}
-          <img
-            src={mediaImages[lightboxIndex]}
-            alt=""
-            className="max-w-[90%] max-h-[80%] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            draggable={false}
-          />
+          {/* Image + caption + counter */}
+          <div className="flex flex-col items-center max-w-[90%] max-h-[85%] gap-2" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={mediaImages[lightboxIndex]}
+              alt=""
+              className="max-h-[75vh] object-contain rounded-lg shadow-2xl"
+              draggable={false}
+            />
+            {mediaItems[lightboxIndex]?.caption && (
+              <p className="text-white/90 text-sm text-center bg-black/50 px-4 py-1.5 rounded-full max-w-full truncate">
+                {mediaItems[lightboxIndex].caption}
+              </p>
+            )}
+            {mediaImages.length > 1 && (
+              <span className="text-white text-sm font-medium bg-black/50 px-3 py-1 rounded-full">
+                {lightboxIndex + 1} / {mediaImages.length}
+              </span>
+            )}
+          </div>
         </div>
       )}
 
