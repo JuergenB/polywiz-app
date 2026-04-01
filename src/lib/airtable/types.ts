@@ -54,7 +54,7 @@ export const CAMPAIGN_TYPES = [
 export type CampaignType = (typeof CAMPAIGN_TYPES)[number];
 
 /** Campaign types with generation pipeline implemented */
-export const ENABLED_CAMPAIGN_TYPES: CampaignType[] = ["Newsletter", "Blog Post", "Event"];
+export const ENABLED_CAMPAIGN_TYPES: CampaignType[] = ["Newsletter", "Blog Post", "Event", "Exhibition"];
 
 export const CAMPAIGN_STATUSES = [
   "Draft",
