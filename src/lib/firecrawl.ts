@@ -595,6 +595,306 @@ export async function scrapeEvent(url: string): Promise<ScrapedEventBlogData> {
   return { ...blogData, eventData };
 }
 
+// ── Exhibition scraper ─────────────────────────────────────────────────
+
+export interface ScrapedArtwork {
+  artistName: string;
+  artworkTitle: string;
+  medium: string | null;
+  thumbnailUrl: string;
+  detailLink: string | null;
+}
+
+export interface ScrapedExhibitionData {
+  title: string | null;
+  curator: string | null;
+  description: string | null;
+  dates: string | null;
+  venue: string | null;
+  artworks: ScrapedArtwork[];
+}
+
+export interface ScrapedExhibitionBlogData extends ScrapedBlogData {
+  exhibitionData: ScrapedExhibitionData | null;
+}
+
+/**
+ * Detect an Artwork Archive embed URL from a page's HTML.
+ *
+ * Looks for the embed_js.js script pattern used on WordPress/Ghost pages:
+ *   s.src = "https://www.artworkarchive.com/profile/{org}/embed_js.js"
+ *
+ * Returns the direct exhibition embed URL if found, null otherwise.
+ */
+function detectAaEmbedUrl(html: string): string | null {
+  // Pattern 1: embed_js.js script src
+  const scriptMatch = html.match(
+    /artworkarchive\.com\/profile\/([^/"]+)\/embed_js\.js/i
+  );
+  if (scriptMatch) {
+    const org = scriptMatch[1];
+    // The embed_js.js loads the full profile — look for exhibition-specific hints
+    // Check if there's an exhibition slug in the page context
+    const exhibMatch = html.match(
+      /artworkarchive\.com\/profile\/[^/"]+\/embed\/exhibition\/([^/"?#]+)/i
+    );
+    if (exhibMatch) {
+      return `https://www.artworkarchive.com/profile/${org}/embed/exhibition/${exhibMatch[1]}`;
+    }
+    // Fallback: just the profile embed (will contain all public exhibitions)
+    return `https://www.artworkarchive.com/profile/${org}`;
+  }
+
+  // Pattern 2: direct embed URL in href or src
+  const directMatch = html.match(
+    /https?:\/\/(?:www\.)?artworkarchive\.com\/profile\/([^/"]+)\/embed\/exhibition\/([^/"?#\s]+)/i
+  );
+  if (directMatch) {
+    return `https://www.artworkarchive.com/profile/${directMatch[1]}/embed/exhibition/${directMatch[2]}`;
+  }
+
+  // Pattern 3: non-embed exhibition URL (public page)
+  const publicMatch = html.match(
+    /https?:\/\/(?:www\.)?artworkarchive\.com\/profile\/([^/"]+)\/exhibition\/([^/"?#\s]+)/i
+  );
+  if (publicMatch) {
+    return `https://www.artworkarchive.com/profile/${publicMatch[1]}/embed/exhibition/${publicMatch[2]}`;
+  }
+
+  return null;
+}
+
+/**
+ * Scrape an exhibition page with Artwork Archive embed auto-detection.
+ *
+ * Flow:
+ * 1. Scrape the gallery page HTML (WordPress, Ghost, etc.) — do NOT exclude scripts
+ * 2. Detect AA embed URL from the HTML
+ * 3. If found: scrape AA embed with Firecrawl JSON extraction (artwork schema)
+ * 4. Synthesize sections from artworks (one per artist)
+ * 5. Fall back to blog post scraper if no AA embed detected
+ */
+export async function scrapeExhibition(url: string): Promise<ScrapedExhibitionBlogData> {
+  const apiKey = getApiKey();
+
+  // Step 1: Scrape the gallery page HTML to detect AA embed
+  // IMPORTANT: Do NOT exclude script/iframe tags — we need to find the embed
+  let aaEmbedUrl: string | null = null;
+
+  // Check if the URL itself is already an AA URL
+  if (url.includes("artworkarchive.com")) {
+    aaEmbedUrl = url;
+    // Ensure it's an embed URL
+    if (!aaEmbedUrl.includes("/embed/")) {
+      aaEmbedUrl = aaEmbedUrl.replace(/\/exhibition\//, "/embed/exhibition/");
+    }
+  } else {
+    // Fetch the gallery page HTML to find the embed
+    try {
+      const htmlRes = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url,
+          formats: ["html", "markdown"],
+          onlyMainContent: false,
+          // Do NOT exclude scripts — we need to detect the AA embed
+          excludeTags: [
+            "nav", "footer", "header",
+            ".sidebar", ".widget", ".ad", ".popup",
+            "style",
+            ".related-posts", ".recommended", ".read-next",
+            ".post-feed", ".post-card", ".gh-post-feed",
+          ],
+          waitFor: 3000,
+        }),
+      });
+
+      if (htmlRes.ok) {
+        const htmlData = await htmlRes.json();
+        const pageHtml = htmlData?.data?.html || "";
+        aaEmbedUrl = detectAaEmbedUrl(pageHtml);
+
+        if (aaEmbedUrl) {
+          console.log(`[scrapeExhibition] Auto-detected AA embed: ${aaEmbedUrl}`);
+        } else {
+          console.log("[scrapeExhibition] No AA embed detected, falling back to blog post scraper");
+        }
+      }
+    } catch (err) {
+      console.warn("[scrapeExhibition] HTML scrape failed for embed detection:", err);
+    }
+  }
+
+  // Step 2: If we found an AA embed URL, scrape it with JSON extraction
+  let exhibitionData: ScrapedExhibitionData | null = null;
+
+  if (aaEmbedUrl) {
+    try {
+      const jsonRes = await fetch(`${FIRECRAWL_BASE}/scrape`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          url: aaEmbedUrl,
+          formats: ["json", "markdown"],
+          jsonOptions: {
+            schema: {
+              type: "object",
+              properties: {
+                title: { type: "string", description: "Exhibition title" },
+                curator: { type: "string", description: "Curator name" },
+                description: { type: "string", description: "Exhibition description or curator statement" },
+                dates: { type: "string", description: "Exhibition dates (opening and closing)" },
+                venue: { type: "string", description: "Gallery or venue name" },
+                artworks: {
+                  type: "array",
+                  items: {
+                    type: "object",
+                    properties: {
+                      artist_name: { type: "string" },
+                      artwork_title: { type: "string" },
+                      medium: { type: "string" },
+                      artwork_thumbnail_URL: { type: "string" },
+                      artwork_detail_link: { type: "string" },
+                    },
+                  },
+                },
+              },
+            },
+            prompt: "Extract the exhibition title, curator, description, dates, venue, and all artworks. For each artwork, extract the artist name, artwork title, medium/materials, the image URL (thumbnail or full), and the detail page link.",
+          },
+          onlyMainContent: false,
+          waitFor: 5000,
+        }),
+      });
+
+      if (jsonRes.ok) {
+        const jsonData = await jsonRes.json();
+        const extracted = jsonData?.data?.json;
+
+        if (extracted && typeof extracted === "object") {
+          const rawArtworks = Array.isArray(extracted.artworks) ? extracted.artworks : [];
+          const artworks: ScrapedArtwork[] = rawArtworks
+            .filter((a: Record<string, unknown>) => a.artist_name || a.artwork_title)
+            .map((a: Record<string, unknown>) => ({
+              artistName: String(a.artist_name || "Unknown Artist"),
+              artworkTitle: String(a.artwork_title || "Untitled"),
+              medium: a.medium ? String(a.medium) : null,
+              thumbnailUrl: String(a.artwork_thumbnail_URL || ""),
+              detailLink: a.artwork_detail_link ? String(a.artwork_detail_link) : null,
+            }));
+
+          exhibitionData = {
+            title: extracted.title ? String(extracted.title) : null,
+            curator: extracted.curator ? String(extracted.curator) : null,
+            description: extracted.description ? String(extracted.description) : null,
+            dates: extracted.dates ? String(extracted.dates) : null,
+            venue: extracted.venue ? String(extracted.venue) : null,
+            artworks,
+          };
+
+          console.log(`[scrapeExhibition] Extracted ${artworks.length} artworks from AA embed`);
+
+          // Build images and sections from the artworks
+          const images: ScrapedImage[] = [];
+          const sections: ContentSection[] = [];
+
+          // Group artworks by artist for sections
+          const artistGroups = new Map<string, ScrapedArtwork[]>();
+          for (const artwork of artworks) {
+            const group = artistGroups.get(artwork.artistName) || [];
+            group.push(artwork);
+            artistGroups.set(artwork.artistName, group);
+          }
+
+          for (const [artistName, works] of artistGroups) {
+            const sectionImages: ScrapedImage[] = [];
+            for (const work of works) {
+              if (work.thumbnailUrl) {
+                const img: ScrapedImage = {
+                  url: work.thumbnailUrl,
+                  alt: `${work.artworkTitle} by ${artistName}${work.medium ? ` — ${work.medium}` : ""}`,
+                };
+                images.push(img);
+                sectionImages.push(img);
+              }
+            }
+
+            const contentParts = works.map((w) => {
+              let line = `**${w.artworkTitle}**`;
+              if (w.medium) line += ` — ${w.medium}`;
+              return line;
+            });
+
+            sections.push({
+              heading: artistName,
+              level: 2,
+              content: contentParts.join("\n"),
+              images: sectionImages,
+            });
+          }
+
+          // Also get markdown from the response for supplemental content
+          const page = jsonData?.data;
+          const markdown = page?.markdown || "";
+          const metadata = page?.metadata || {};
+          const ogImage = metadata.ogImage || metadata["og:image"] || null;
+
+          // Add og:image as hero if not already in artwork images
+          if (ogImage && !images.some((img) => img.url.split("?")[0] === ogImage.split("?")[0])) {
+            images.unshift({ url: ogImage, alt: exhibitionData.title || "" });
+          }
+
+          const heroImage = ogImage
+            ? { url: ogImage, alt: exhibitionData.title || "" }
+            : images[0] || null;
+
+          // Build a rich content string from exhibition data for the prompt
+          const exhibContent = [
+            exhibitionData.title ? `# ${exhibitionData.title}` : "",
+            exhibitionData.venue ? `**Venue:** ${exhibitionData.venue}` : "",
+            exhibitionData.dates ? `**Dates:** ${exhibitionData.dates}` : "",
+            exhibitionData.curator ? `**Curator:** ${exhibitionData.curator}` : "",
+            exhibitionData.description || "",
+            "",
+            `## Featured Artists (${artworks.length} works)`,
+            ...artworks.map((a) =>
+              `- **${a.artworkTitle}** by ${a.artistName}${a.medium ? ` (${a.medium})` : ""}`
+            ),
+          ].filter(Boolean).join("\n");
+
+          return {
+            title: exhibitionData.title || metadata.title || "",
+            description: exhibitionData.description || metadata.description || "",
+            content: exhibContent,
+            images,
+            sections,
+            heroImage,
+            ogImage,
+            author: exhibitionData.curator,
+            publishDate: null,
+            url,
+            exhibitionData,
+          };
+        }
+      }
+    } catch (err) {
+      console.warn("[scrapeExhibition] JSON extraction from AA embed failed:", err);
+    }
+  }
+
+  // Fallback: plain blog post scraper (works for non-AA exhibition pages)
+  console.log("[scrapeExhibition] Falling back to blog post scraper");
+  const blogData = await scrapeBlogPost(url);
+  return { ...blogData, exhibitionData };
+}
+
 /**
  * Scrape a supplemental URL for additional context (lightweight).
  * Returns just the markdown content and images — no section parsing.

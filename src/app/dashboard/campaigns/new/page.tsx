@@ -75,7 +75,7 @@ const CAMPAIGN_TYPE_ICONS: Record<CampaignType, React.ElementType> = {
 const CAMPAIGN_TYPE_DESCRIPTIONS: Record<CampaignType, string> = {
   Newsletter: "Promote a newsletter issue across social media. Each story becomes its own post with a link that scrolls directly to that story. Great for curated newsletters with multiple features.",
   "Blog Post": "Turn a blog post or article into a series of social media posts. Images and key quotes are extracted and cycled through, with each post highlighting a different aspect of the article.",
-  Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Scrapes exhibition pages and artist profiles to build a months-long drip campaign. (Coming soon)",
+  Exhibition: "Promote an art exhibition by featuring individual artists and artworks. Auto-detects Artwork Archive embeds on gallery pages to extract structured artwork data, artist names, and images.",
   "Artist Profile": "Spotlight an artist with posts featuring their work and story. Uses artwork images and artist bio to generate posts that celebrate the artist across platforms. (Coming soon)",
   "Podcast Episode": "Promote a podcast episode using show notes, guest highlights, and key quotes. Can incorporate transcripts for deeper content extraction. (Coming soon)",
   Event: "Promote physical or virtual events — gallery openings, anniversary celebrations, studio tours, art fairs. Date-driven campaigns that build intensity toward the event date with RSVP/ticket CTAs.",

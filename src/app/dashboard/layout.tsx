@@ -77,19 +77,19 @@ const settingsSubNav = [
     icon: Settings,
   },
   {
-    label: "Brands",
+    label: "Brand Settings",
     href: "/dashboard/settings/brands",
     icon: Palette,
-  },
-  {
-    label: "Platforms",
-    href: "/dashboard/settings/platforms",
-    icon: Layers,
   },
   {
     label: "Campaign Types",
     href: "/dashboard/settings/campaign-types",
     icon: Megaphone,
+  },
+  {
+    label: "Platforms",
+    href: "/dashboard/settings/platforms",
+    icon: Layers,
   },
 ];
 

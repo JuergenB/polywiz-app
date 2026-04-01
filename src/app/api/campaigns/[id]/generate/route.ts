@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, listRecords, createRecord } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { getCampaignTypeRule, getGenerationRules } from "@/lib/airtable/campaign-type-rules";
-import { scrapeBlogPost, scrapeNewsletter, scrapeEvent, scrapeSupplemental, type ContentSection, type ScrapedEventBlogData } from "@/lib/firecrawl";
+import { scrapeBlogPost, scrapeNewsletter, scrapeEvent, scrapeExhibition, scrapeSupplemental, type ContentSection, type ScrapedEventBlogData, type ScrapedExhibitionBlogData } from "@/lib/firecrawl";
 import { generatePosts, resolveAnthropicConfig } from "@/lib/anthropic";
 import {
   SYSTEM_PROMPT,
@@ -493,17 +493,20 @@ export async function POST(
         // ── Step 4: Scrape content ──────────────────────────────
         const isNewsletter = fields.Type === "Newsletter";
         const isEventType = fields.Type === "Event" || fields.Type === "Open Call";
+        const isExhibition = fields.Type === "Exhibition";
 
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "running",
-          message: `Scraping ${isEventType ? "event page" : isNewsletter ? "newsletter" : "blog post"} content...`,
+          message: `Scraping ${isExhibition ? "exhibition" : isEventType ? "event page" : isNewsletter ? "newsletter" : "blog post"} content...`,
         });
 
-        const blogData = isEventType
-          ? await scrapeEvent(fields.URL)
-          : isNewsletter
-            ? await scrapeNewsletter(fields.URL)
-            : await scrapeBlogPost(fields.URL);
+        const blogData = isExhibition
+          ? await scrapeExhibition(fields.URL)
+          : isEventType
+            ? await scrapeEvent(fields.URL)
+            : isNewsletter
+              ? await scrapeNewsletter(fields.URL)
+              : await scrapeBlogPost(fields.URL);
 
         // Scrape additional URLs if present
         let supplementalContent = "";
@@ -553,8 +556,9 @@ export async function POST(
         const contentSections = blogData.sections?.filter((s: ContentSection) => !s.isPreamble) || [];
         const isMultiSection = contentSections.length > 1;
 
-        // Extract event data if available
+        // Extract event/exhibition data if available
         const eventData = isEventType ? (blogData as ScrapedEventBlogData).eventData : null;
+        const exhibitionData = isExhibition ? (blogData as ScrapedExhibitionBlogData).exhibitionData : null;
 
         const scrapedImageCount = blogData.images.length;
         const sectionCount = contentSections.length;
@@ -562,9 +566,11 @@ export async function POST(
         sendEvent(controller, encoder, {
           step: 4, totalSteps, status: "success",
           message: `Scraped: "${blogData.title}"${additionalUrls.length > 0 ? ` + ${additionalUrls.length} additional source${additionalUrls.length > 1 ? "s" : ""}` : ""}`,
-          detail: isEventType && eventData
-            ? `Found ${scrapedImageCount} images · Extracted event details: ${Object.entries(eventData).filter(([, v]) => v).map(([k]) => k).join(", ")}`
-            : isMultiSection
+          detail: isExhibition && exhibitionData
+            ? `Found ${exhibitionData.artworks.length} artworks by ${new Set(exhibitionData.artworks.map((a) => a.artistName)).size} artists · ${scrapedImageCount} images`
+            : isEventType && eventData
+              ? `Found ${scrapedImageCount} images · Extracted event details: ${Object.entries(eventData).filter(([, v]) => v).map(([k]) => k).join(", ")}`
+              : isMultiSection
               ? `Found ${scrapedImageCount} images across ${sectionCount} sections (${contentSections.slice(0, 6).map((s: ContentSection) => s.heading).join(", ")}${sectionCount > 6 ? `, +${sectionCount - 6} more` : ""})`
               : `Found ${scrapedImageCount} images, ${blogData.content.length} chars of content`,
         });
