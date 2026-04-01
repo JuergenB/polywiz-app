@@ -45,8 +45,15 @@ export async function assembleCarouselPDF(
 
     const pageWidth = image.width;
 
-    if (!item.caption) {
-      // No caption — full-bleed image only
+    // Pre-rendered slides from the carousel slide generator already have captions
+    // baked in — use them full-bleed without adding a PDF caption bar.
+    // Detects both Instagram (1080x1350) and LinkedIn (1080x1080) slide dimensions.
+    const isPreRenderedSlide =
+      (image.width === 1080 && image.height === 1350) ||
+      (image.width === 1080 && image.height === 1080);
+
+    if (!item.caption || isPreRenderedSlide) {
+      // No caption or pre-rendered slide — full-bleed image only
       const page = pdfDoc.addPage([pageWidth, image.height]);
       page.drawImage(image, { x: 0, y: 0, width: image.width, height: image.height });
       continue;
