@@ -220,8 +220,9 @@ export async function POST(
     });
   } catch (error) {
     console.error("Failed to schedule campaign:", error);
+    const message = error instanceof Error ? error.message : "Failed to schedule campaign";
     return NextResponse.json(
-      { error: "Failed to schedule campaign" },
+      { error: message },
       { status: 500 }
     );
   }
