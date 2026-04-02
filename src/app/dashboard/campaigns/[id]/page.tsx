@@ -1067,13 +1067,30 @@ export default function CampaignDetailPage() {
                           const result = await applyRes.json();
                           queryClient.invalidateQueries({ queryKey: ["campaign"] });
                           if (result.failedPosts > 0) {
-                            toast.warning(`${result.scheduledPosts} posts scheduled on Zernio, ${result.failedPosts} failed`);
+                            const failDetails = result.results
+                              ?.filter((r: { success: boolean }) => !r.success)
+                              .map((r: { platform: string; error: string }) => `${r.platform}: ${r.error}`)
+                              .join("\n");
+                            toast.warning(
+                              `${result.scheduledPosts} scheduled, ${result.failedPosts} failed`,
+                              { description: failDetails, duration: 10000 }
+                            );
                           } else {
-                            toast.success(`${result.scheduledPosts} posts scheduled on Zernio!`);
+                            const dates = result.results
+                              ?.filter((r: { success: boolean }) => r.success)
+                              .map((r: { platform: string; scheduledDate: string }) => {
+                                const d = new Date(r.scheduledDate);
+                                return `${r.platform}: ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+                              })
+                              .join(", ");
+                            toast.success(
+                              `${result.scheduledPosts} posts scheduled on Zernio`,
+                              { description: dates, duration: 8000 }
+                            );
                           }
                         } else {
                           const errData = await applyRes.json().catch(() => ({}));
-                          toast.error(`Failed to schedule: ${errData.error || applyRes.statusText}`);
+                          toast.error(`Failed to schedule: ${errData.error || applyRes.statusText}`, { duration: 10000 });
                         }
                         setIsScheduling(false);
                       }}
