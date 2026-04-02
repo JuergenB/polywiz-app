@@ -305,6 +305,9 @@ export async function renderCarouselSlide(
  * Center-aligned, up to 2 lines, proportional to slide width.
  */
 function buildCaptionSvg(caption: string, textColor: string, width: number, height: number): string {
+  // Font: Use "DejaVu Sans" first (available on Vercel/Lambda), then common system fonts.
+  // Helvetica/Arial are NOT available on serverless Linux environments.
+  const fontFamily = '"DejaVu Sans", "Liberation Sans", "Noto Sans", sans-serif';
   const fontSize = 28;
   const lineHeight = 38;
   const maxCharsPerLine = 42;
@@ -344,7 +347,7 @@ function buildCaptionSvg(caption: string, textColor: string, width: number, heig
   const startY = (height - bottomPad - totalTextHeight) / 2 + fontSize * 0.8;
 
   const textElements = lines
-    .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="Helvetica, Arial, sans-serif" font-size="${fontSize}" font-weight="${lines.length === 1 ? 'bold' : 'normal'}" fill="${esc(textColor)}">${esc(line)}</text>`)
+    .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${esc(fontFamily)}" font-size="${fontSize}" font-weight="${lines.length === 1 ? 'bold' : 'normal'}" fill="${esc(textColor)}">${esc(line)}</text>`)
     .join("\n    ");
 
   return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg" overflow="hidden">
