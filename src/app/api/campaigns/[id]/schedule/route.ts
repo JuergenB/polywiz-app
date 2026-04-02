@@ -308,6 +308,7 @@ export async function POST(
           createBody.firstComment = post.fields["First Comment"];
         }
 
+        console.log(`[schedule] Creating Zernio post for ${platform} | airtableId=${post.id} | date=${scheduledDate}`);
         const { data: zernioPost, error: zernioError } = await client.posts.createPost({
           body: createBody as Parameters<typeof client.posts.createPost>[0]["body"],
         });
@@ -327,20 +328,36 @@ export async function POST(
           continue;
         }
 
-        // Success — update with Zernio ID and Scheduled status
-        const zernioPostId = (zernioPost as { _id?: string })?._id || "";
+        // Success — extract Zernio Post ID with defensive logging
+        // Zernio wraps the post in a `post` property: { post: { _id, ... }, message: "..." }
+        const zernioResponse = zernioPost as Record<string, unknown>;
+        const innerPost = (zernioResponse?.post || zernioResponse) as Record<string, unknown>;
+        const zernioPostId = (innerPost?._id || innerPost?.id || zernioResponse?._id || zernioResponse?.id || "") as string;
+
+        console.log(`[schedule] Zernio response for ${platform} post ${post.id}:`, JSON.stringify({
+          hasData: !!zernioPost,
+          responseKeys: zernioResponse ? Object.keys(zernioResponse) : [],
+          innerPostKeys: innerPost ? Object.keys(innerPost) : [],
+          extractedId: zernioPostId || "(empty)",
+        }));
+
+        if (!zernioPostId) {
+          console.error(`[schedule] WARNING: Zernio returned success but no post ID for ${platform} post ${post.id}. Full response:`, JSON.stringify(zernioPost));
+        }
+
         await updateRecord("Posts", post.id, {
           "Scheduled Date": scheduledDate,
           "Zernio Post ID": zernioPostId,
-          Status: "Scheduled",
+          Status: zernioPostId ? "Scheduled" : "Approved", // Don't mark Scheduled without an ID
         });
 
         results.push({
           postId: post.id,
           platform,
           scheduledDate,
-          success: true,
-          zernioPostId,
+          success: !!zernioPostId,
+          zernioPostId: zernioPostId || undefined,
+          error: zernioPostId ? undefined : "Zernio returned no post ID",
         });
       } catch (err) {
         await updateRecord("Posts", post.id, {
@@ -358,9 +375,17 @@ export async function POST(
 
     const successCount = results.filter((r) => r.success).length;
     const failCount = results.filter((r) => !r.success).length;
+    const missingIds = results.filter((r) => r.success && !r.zernioPostId);
 
-    // Update campaign status to Active
-    await updateRecord("Campaigns", campaignId, { Status: "Active" });
+    console.log(`[schedule] Campaign ${campaignId} complete: ${successCount} succeeded, ${failCount} failed, ${missingIds.length} missing Zernio IDs`);
+    if (missingIds.length > 0) {
+      console.error(`[schedule] CRITICAL: ${missingIds.length} posts marked success but have no Zernio Post ID:`, missingIds.map(r => r.postId));
+    }
+
+    // Update campaign status to Active only if we have successes
+    if (successCount > 0) {
+      await updateRecord("Campaigns", campaignId, { Status: "Active" });
+    }
 
     return NextResponse.json({
       success: failCount === 0,

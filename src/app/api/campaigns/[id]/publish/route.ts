@@ -209,18 +209,29 @@ export async function POST(
           continue;
         }
 
-        // Store the Zernio post ID and update status to Published
-        const zernioPostId = (zernioPost as { _id?: string })?._id || "";
+        // Store the Zernio post ID and update status
+        // Zernio wraps the post in a `post` property: { post: { _id, ... }, message: "..." }
+        const zernioResponse = zernioPost as Record<string, unknown>;
+        const innerPost = (zernioResponse?.post || zernioResponse) as Record<string, unknown>;
+        const zernioPostId = (innerPost?._id || innerPost?.id || zernioResponse?._id || zernioResponse?.id || "") as string;
+
+        console.log(`[publish] Zernio response for ${platform} post ${post.id}: extractedId=${zernioPostId || "(empty)"}, responseKeys=${zernioResponse ? Object.keys(zernioResponse) : []}`);
+
+        if (!zernioPostId) {
+          console.error(`[publish] WARNING: Zernio returned success but no post ID for ${platform} post ${post.id}`);
+        }
+
         await updateRecord("Posts", post.id, {
           "Zernio Post ID": zernioPostId,
-          Status: "Scheduled",
+          Status: zernioPostId ? "Scheduled" : "Approved",
         });
 
         results.push({
           postId: post.id,
           platform,
-          success: true,
-          zernioPostId,
+          success: !!zernioPostId,
+          zernioPostId: zernioPostId || undefined,
+          error: zernioPostId ? undefined : "Zernio returned no post ID",
         });
       } catch (err) {
         results.push({

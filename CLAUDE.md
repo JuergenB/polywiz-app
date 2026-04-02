@@ -117,6 +117,7 @@ social-media-promo-scheduler/
 - **CLI:** `@zernio/cli` (global install)
 - **Key endpoints:** See `docs/zernio-api-openapi.yaml`
 - **Rate limits:** Vary by plan (Free: 60/min, Build: 120/min)
+- **Response shape:** `createPost` returns `{ post: { _id: "..." }, message: "..." }` — the post ID is nested under `.post._id`, NOT at the top level `._id`. Always extract via `data.post._id`.
 - **Campaign-relevant features:**
   - Per-platform `customContent` and `customMedia` per post
   - Per-platform `scheduledFor` overrides
