@@ -295,10 +295,18 @@ export async function renderCarouselSlide(
     ? await resizedImgPipeline.png().toBuffer()
     : await resizedImgPipeline.flatten({ background: frame }).jpeg({ quality: 95 }).toBuffer();
 
-  // Build caption overlay using Sharp's text input (Pango) — works on Vercel/Lambda
-  // Unlike SVG @font-face, Pango text rendering uses system fontconfig which
-  // reliably finds at least one sans-serif font on any Linux environment.
-  const captionOverlay = caption ? await buildCaptionPango(caption, textColor, slideW, captionAreaH) : null;
+  // Build caption overlay — try Pango first (reliable on most Linux), fall back to SVG
+  let captionOverlay: Buffer | null = null;
+  if (caption) {
+    try {
+      captionOverlay = await buildCaptionPango(caption, textColor, slideW, captionAreaH);
+    } catch {
+      // Pango not available (Vercel pre-built Sharp may lack text support)
+      // Fall back to SVG with embedded font
+      const svg = buildCaptionSvg(caption, textColor, slideW, captionAreaH);
+      captionOverlay = await sharp(Buffer.from(svg)).png().toBuffer();
+    }
+  }
 
   // Compose the slide
   const composites: sharp.OverlayOptions[] = [
@@ -416,6 +424,52 @@ async function buildCaptionPango(
     .composite([{ input: textImage, left: offsetX, top: offsetY }])
     .png()
     .toBuffer();
+}
+
+/**
+ * SVG fallback for caption rendering when Pango is not available.
+ * Embeds Noto Sans as base64 @font-face for serverless compatibility.
+ */
+function buildCaptionSvg(caption: string, textColor: string, width: number, height: number): string {
+  const fontSize = 14;
+  const lineHeight = 22;
+  const maxCharsPerLine = 52;
+  const sidePadding = 60;
+
+  const words = caption.split(/\s+/);
+  const lines: string[] = [];
+  let currentLine = "";
+  for (const word of words) {
+    const candidate = currentLine ? `${currentLine} ${word}` : word;
+    if (candidate.length > maxCharsPerLine && currentLine) {
+      lines.push(currentLine);
+      if (lines.length >= 2) break;
+      currentLine = word;
+    } else {
+      currentLine = candidate;
+    }
+  }
+  if (currentLine && lines.length < 2) lines.push(currentLine);
+  if (lines.length === 2 && words.length > lines.join(" ").split(/\s+/).length) {
+    lines[1] = lines[1].slice(0, maxCharsPerLine - 1).replace(/\s+\S*$/, "") + "\u2026";
+  }
+
+  const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+
+  const totalTextHeight = lines.length * lineHeight;
+  const startY = (height - totalTextHeight) / 2 + fontSize * 0.8 - 6;
+
+  const fontB64 = getEmbeddedFontBase64();
+  const fontFace = fontB64
+    ? `<defs><style>@font-face{font-family:"CF";src:url("data:font/truetype;base64,${fontB64}")format("truetype")}</style></defs>`
+    : "";
+  const ff = fontB64 ? "CF" : "sans-serif";
+
+  const textEls = lines
+    .map((line, i) => `<text x="${width / 2}" y="${startY + i * lineHeight}" text-anchor="middle" font-family="${ff}" font-size="${fontSize}" fill="${esc(textColor)}">${esc(line)}</text>`)
+    .join("");
+
+  return `<svg width="${width}" height="${height}" xmlns="http://www.w3.org/2000/svg">${fontFace}${textEls}</svg>`;
 }
 
 /**
