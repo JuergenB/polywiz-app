@@ -546,15 +546,19 @@ export default function CampaignDetailPage() {
 
   const quickUnschedule = async (postId: string) => {
     try {
-      await fetch(`/api/posts/${postId}`, {
+      const res = await fetch(`/api/posts/${postId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: "Approved", clearZernioState: true }),
       });
-      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to unschedule");
+      }
+      await queryClient.refetchQueries({ queryKey: ["campaign", campaignId] });
       toast.success("Post unscheduled");
-    } catch {
-      toast.error("Failed to unschedule post");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to unschedule post");
     }
   };
 
