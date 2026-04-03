@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import { deleteShortLinks } from "@/lib/short-io";
+import { createBrandClient } from "@/lib/late-api/client";
 
 interface CampaignFields {
   Status: string;
@@ -10,11 +11,13 @@ interface CampaignFields {
 interface PostFields {
   Campaign: string[];
   "Short URL": string;
+  "Zernio Post ID": string;
 }
 
 interface BrandFields {
   "Short Domain": string;
   "Short API Key Label": string;
+  "Zernio API Key Label": string;
 }
 
 /**
@@ -33,11 +36,11 @@ export async function POST(
     const campaign = await getRecord<CampaignFields>("Campaigns", id);
     const status = campaign.fields.Status;
 
-    // Only allow reset from Review, Generating, Scraping, or Failed
-    const resettableStatuses = ["Review", "Generating", "Scraping", "Failed"];
+    // Only allow reset from Review, Generating, Scraping, Failed, or Active
+    const resettableStatuses = ["Review", "Generating", "Scraping", "Failed", "Active"];
     if (!resettableStatuses.includes(status)) {
       return NextResponse.json(
-        { error: `Cannot reset a campaign in "${status}" status. Only Review, Generating, Scraping, or Failed campaigns can be reset.` },
+        { error: `Cannot reset a campaign in "${status}" status. Only Review, Generating, Scraping, Failed, or Active campaigns can be reset.` },
         { status: 400 }
       );
     }
@@ -70,6 +73,32 @@ export async function POST(
     if (shortUrls.length > 0) {
       const deleted = await deleteShortLinks(shortUrls, brand);
       console.log(`[reset] Deleted ${deleted}/${shortUrls.length} Short.io links`);
+    }
+
+    // Cancel scheduled posts on Zernio
+    const zernioPostIds = linkedPosts
+      .map((p) => p.fields["Zernio Post ID"])
+      .filter(Boolean);
+
+    if (zernioPostIds.length > 0) {
+      let zernioApiKeyLabel: string | null = null;
+      if (brandId) {
+        try {
+          const brandRecord = await getRecord<BrandFields>("Brands", brandId);
+          zernioApiKeyLabel = brandRecord.fields["Zernio API Key Label"] || null;
+        } catch { /* fall back to global */ }
+      }
+      const late = createBrandClient({ zernioApiKeyLabel });
+      let deletedZernio = 0;
+      for (const zpid of zernioPostIds) {
+        try {
+          await late.posts.deletePost({ path: { postId: zpid } });
+          deletedZernio++;
+        } catch (err) {
+          console.warn(`[reset] Failed to delete Zernio post ${zpid}:`, err);
+        }
+      }
+      console.log(`[reset] Deleted ${deletedZernio}/${zernioPostIds.length} Zernio posts`);
     }
 
     // Delete Airtable post records

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord } from "@/lib/airtable/client";
 import { deleteShortLink } from "@/lib/short-io";
 import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
+import { createBrandClient } from "@/lib/late-api/client";
 
 /**
  * PATCH /api/posts/[id]
@@ -56,6 +57,36 @@ export async function PATCH(
 
         // If retrying a failed/scheduled post, clear Zernio state so it can be re-published
         if (body.clearZernioState) {
+          // If the post has a Zernio Post ID, delete it from Zernio first
+          try {
+            const post = await getRecord<{
+              "Zernio Post ID": string;
+              Campaign: string[];
+            }>("Posts", id);
+            const zernioPostId = post.fields["Zernio Post ID"];
+            if (zernioPostId) {
+              // Resolve brand's Zernio API key via campaign → brand chain
+              const campaignId = post.fields.Campaign?.[0];
+              let brandConfig: { zernioApiKeyLabel?: string | null } | undefined;
+              if (campaignId) {
+                try {
+                  const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
+                  const brandId = campaign.fields.Brand?.[0];
+                  if (brandId) {
+                    const brand = await getRecord<{ "Zernio API Key Label": string }>("Brands", brandId);
+                    brandConfig = { zernioApiKeyLabel: brand.fields["Zernio API Key Label"] || null };
+                  }
+                } catch (err) {
+                  console.warn("[posts] Failed to resolve brand for Zernio delete:", err);
+                }
+              }
+              const late = createBrandClient(brandConfig);
+              await late.posts.deletePost({ path: { postId: zernioPostId } });
+              console.log(`[posts] Deleted Zernio post ${zernioPostId}`);
+            }
+          } catch (err) {
+            console.warn("[posts] Failed to delete Zernio post (may already be removed):", err);
+          }
           fields["Zernio Post ID"] = "";
           fields["Scheduled Date"] = "";
         }

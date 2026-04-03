@@ -101,6 +101,7 @@ import {
   Send,
   Pipette,
   Eraser,
+  CalendarX2,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -541,6 +542,20 @@ export default function CampaignDetailPage() {
       });
       queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
     } catch {}
+  };
+
+  const quickUnschedule = async (postId: string) => {
+    try {
+      await fetch(`/api/posts/${postId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "Approved", clearZernioState: true }),
+      });
+      queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+      toast.success("Post unscheduled");
+    } catch {
+      toast.error("Failed to unschedule post");
+    }
   };
 
   const quickDelete = async (postId: string) => {
@@ -1413,6 +1428,7 @@ export default function CampaignDetailPage() {
                           onUnapprove={() => quickUnapprove(post.id)}
                           onRetry={() => quickRetry(post.id)}
                           onDelete={() => quickDelete(post.id)}
+                          onUnschedule={() => quickUnschedule(post.id)}
                         />
                       ))}
                     </div>
@@ -1464,12 +1480,13 @@ export default function CampaignDetailPage() {
             <CampaignSettingsReadOnly campaign={campaign} />
           )}
 
-          {/* Reset to Draft — for Review/Failed/Generating/Scraping campaigns */}
-          {["Review", "Failed", "Generating", "Scraping"].includes(campaign.status) && (
+          {/* Reset to Draft — for Review/Failed/Generating/Scraping/Active campaigns */}
+          {["Review", "Failed", "Generating", "Scraping", "Active"].includes(campaign.status) && (
             <ResetCampaignSection
               campaignId={campaignId}
               campaignName={campaign.name}
               postCount={posts.length}
+              hasScheduledPosts={posts.some((p) => ["Scheduled", "Queued"].includes(p.status))}
             />
           )}
 
@@ -1644,6 +1661,7 @@ function CampaignPostRow({
   onUnapprove,
   onRetry,
   onDelete,
+  onUnschedule,
 }: {
   post: Post;
   campaignStatus: CampaignStatus;
@@ -1653,6 +1671,7 @@ function CampaignPostRow({
   onUnapprove?: () => void;
   onRetry?: () => void;
   onDelete?: () => void;
+  onUnschedule?: () => void;
 }) {
   const [thumbLightbox, setThumbLightbox] = useState(false);
   const statusConfig = POST_STATUS_CONFIG[post.status] || { variant: "outline" as const };
@@ -1768,6 +1787,20 @@ function CampaignPostRow({
             >
               <RotateCcw className="mr-1 h-3 w-3" />
               Unapprove
+            </button>
+          </div>
+        )}
+
+        {/* Scheduled post actions — unschedule (cancel on Zernio and revert to Approved) */}
+        {post.status === "Scheduled" && (
+          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+            <button
+              onClick={onUnschedule}
+              className="inline-flex items-center px-2.5 py-1 text-xs text-muted-foreground/50 hover:text-amber-600 transition-colors"
+              title="Cancel schedule and revert to Approved"
+            >
+              <CalendarX2 className="mr-1 h-3 w-3" />
+              Unschedule
             </button>
           </div>
         )}
@@ -3617,10 +3650,12 @@ function ResetCampaignSection({
   campaignId,
   campaignName,
   postCount,
+  hasScheduledPosts = false,
 }: {
   campaignId: string;
   campaignName: string;
   postCount: number;
+  hasScheduledPosts?: boolean;
 }) {
   const [isResetting, setIsResetting] = useState(false);
   const queryClient = useQueryClient();
@@ -3670,6 +3705,9 @@ function ResetCampaignSection({
                   This will reset &ldquo;{campaignName}&rdquo; to Draft status.
                   {postCount > 0 && (
                     <> All {postCount} generated posts will be permanently deleted.</>
+                  )}
+                  {hasScheduledPosts && (
+                    <> Scheduled posts will be cancelled on Zernio.</>
                   )}
                   {" "}You can then adjust settings and regenerate.
                 </AlertDialogDescription>
