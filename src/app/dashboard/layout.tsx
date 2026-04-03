@@ -172,7 +172,7 @@ export default function DashboardLayout({
   };
 
   return (
-    <div className="flex h-screen bg-background">
+    <div className="flex h-screen w-screen overflow-hidden bg-background">
       {/* Sidebar - Desktop only */}
       <aside className="hidden lg:flex w-56 flex-col border-r border-border bg-card">
         {/* Logo */}
@@ -270,7 +270,7 @@ export default function DashboardLayout({
                     ) : (
                       <Palette className="h-4 w-4" />
                     )}
-                    <span className="max-w-32 truncate text-sm">
+                    <span className="hidden sm:inline max-w-32 truncate text-sm">
                       {currentBrand?.name || "Select Brand"}
                     </span>
                     <ChevronDown className="h-3 w-3" />
@@ -315,7 +315,7 @@ export default function DashboardLayout({
                       className="h-3 w-3 rounded-full"
                       style={{ backgroundColor: currentProfile?.color || '#888' }}
                     />
-                    <span className="max-w-24 truncate">
+                    <span className="hidden sm:inline max-w-24 truncate">
                       {currentProfile?.name || 'Select Profile'}
                     </span>
                     <ChevronDown className="h-4 w-4" />
@@ -363,7 +363,7 @@ export default function DashboardLayout({
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="sm" className="gap-2">
-                  <span className="text-sm">{session?.user?.name || "User"}</span>
+                  <span className="hidden sm:inline text-sm">{session?.user?.name || "User"}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-48">
@@ -398,7 +398,7 @@ export default function DashboardLayout({
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto p-4 pb-20 lg:p-6 lg:pb-6">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden w-full p-2 pb-20 sm:p-4 sm:pb-20 lg:p-6 lg:pb-6">
           <ErrorBoundary>{children}</ErrorBoundary>
         </main>
       </div>

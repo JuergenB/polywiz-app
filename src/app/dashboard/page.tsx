@@ -214,7 +214,7 @@ export default function DashboardPage() {
   const pipelineTotal = pipelineStatuses.reduce((sum, s) => sum + (data.posts.byStatus[s] || 0), 0);
 
   return (
-    <div className="mx-auto max-w-6xl space-y-6 pb-8">
+    <div className="mx-auto w-full max-w-6xl space-y-6 pb-8">
       {/* Brand header */}
       <div className="flex items-center justify-between">
         <div>
@@ -340,7 +340,7 @@ export default function DashboardPage() {
       </Card>
 
       {/* ── Main Content: 2 columns ──────────────────────────── */}
-      <div className="grid gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         {/* Left column (span 2) */}
         <div className="lg:col-span-2 space-y-6">
 
