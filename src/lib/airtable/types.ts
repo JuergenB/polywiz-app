@@ -139,6 +139,7 @@ export interface Post {
   zernioPostId: string;
   notes: string;
   originalMedia: string;
+  coverSlideData: string;
 }
 
 export interface PlatformSetting {

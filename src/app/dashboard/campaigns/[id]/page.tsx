@@ -61,6 +61,8 @@ import {
 import { toast } from "sonner";
 import { compressImage, validateImage } from "@/lib/image-compression";
 import { parseMediaItems, serializeMediaItems, type MediaItem } from "@/lib/media-items";
+import { CoverSlideDesigner } from "@/components/posts/cover-slide-designer";
+import type { CoverSlideData } from "@/lib/cover-slide-types";
 import {
   ArrowLeft,
   Calendar,
@@ -102,6 +104,7 @@ import {
   Pipette,
   Eraser,
   CalendarX2,
+  LayoutTemplate,
 } from "lucide-react";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -1996,6 +1999,21 @@ function PostDetailView({
     && !slidesApplied
     && (platformLower === "bluesky" || mediaItems.some((m) => m.caption));
 
+  // Cover slide designer state
+  const [showCoverSlideDesigner, setShowCoverSlideDesigner] = useState(false);
+  const [coverSlideKey, setCoverSlideKey] = useState(0);
+  const canAddCoverSlide = slidePlatforms.includes(platformLower) && mediaImages.length >= 1 && post.status !== "Published";
+  const savedCoverSlideData: CoverSlideData | null = (() => {
+    try {
+      if (!post.coverSlideData) return null;
+      const data: CoverSlideData = JSON.parse(post.coverSlideData);
+      // Only treat as "saved" if the applied cover URL is actually the first media item.
+      // Prevents stale data from a previous session that was reset/undone.
+      if (data.appliedUrl && mediaItems[0]?.url !== data.appliedUrl) return null;
+      return data;
+    } catch { return null; }
+  })();
+
   // Get pixel color from a click on the rendered preview image
   const getPixelColor = (e: React.MouseEvent<HTMLImageElement>): { r: number; g: number; b: number } | null => {
     const img = e.currentTarget;
@@ -2522,6 +2540,17 @@ function PostDetailView({
                 )}
               </Button>
             )}
+            {canAddCoverSlide && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-xs text-muted-foreground h-7 px-2"
+                onClick={() => { setCoverSlideKey((k) => k + 1); setShowCoverSlideDesigner(true); }}
+                title="Design a cover slide for this carousel"
+              >
+                <LayoutTemplate className="h-3 w-3 mr-1" /> Cover
+              </Button>
+            )}
             {canGenerateSlides && (
               <Button
                 variant="ghost"
@@ -2810,6 +2839,30 @@ function PostDetailView({
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Cover slide designer modal */}
+      {showCoverSlideDesigner && (
+        <CoverSlideDesigner
+          key={coverSlideKey}
+          postId={post.id}
+          platform={platformLower}
+          brandId={campaign?.brandIds?.[0]}
+          brandHandle=""
+          brandLogoUrl={null}
+          savedData={savedCoverSlideData}
+          onApply={(newMediaItems) => {
+            setMediaItems(newMediaItems);
+            setShowCoverSlideDesigner(false);
+            queryClient.invalidateQueries({ queryKey: ["campaign"] });
+          }}
+          onRemove={(restoredItems) => {
+            setMediaItems(restoredItems);
+            setShowCoverSlideDesigner(false);
+            queryClient.invalidateQueries({ queryKey: ["campaign"] });
+          }}
+          onClose={() => setShowCoverSlideDesigner(false)}
+        />
+      )}
 
       {/* Carousel slide preview modal */}
       {carouselPreviews && (
