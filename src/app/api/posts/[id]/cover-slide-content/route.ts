@@ -109,7 +109,7 @@ export async function POST(
 <constraints>
 - Every field MUST respect its character budget exactly — do not exceed the limit
 - Write for ${platform} audience expectations
-- Category labels should be short, punchy identifiers (e.g., "Q+ART INTERVIEW", "ARTIST PROFILE", "EXHIBITION")
+- Category labels should be specific to the content, not generic types. Use the campaign name for context (e.g., "THE INTERSECT NEWSLETTER", "Q+ART INTERVIEW", "LIMINAL LIGHT EXHIBITION")
 - The headline field MUST be an actual quote extracted verbatim from the post content — a striking phrase someone said, enclosed in quotation marks
 - Do NOT write an article headline — extract a real quote from the text
 - The description field MUST be attribution only — just the person's name with an em dash prefix (e.g., "— Erin Keane")
@@ -122,7 +122,7 @@ export async function POST(
 <constraints>
 - Every field MUST respect its character budget exactly — do not exceed the limit
 - Write for ${platform} audience expectations
-- Category labels should be short, punchy identifiers (e.g., "Q+ART INTERVIEW", "ARTIST PROFILE", "EXHIBITION")
+- Category labels should be specific to the content, not generic types. Use the campaign name for context (e.g., "THE INTERSECT NEWSLETTER", "Q+ART INTERVIEW", "LIMINAL LIGHT EXHIBITION")
 - Headlines should be attention-grabbing, specific, and capture the essence of the content
 - Descriptions should provide just enough context to entice the reader to swipe through
 - Match the brand's editorial voice: professional yet approachable
@@ -134,7 +134,13 @@ export async function POST(
 Generate text fields for a quotable card. Return ONLY a JSON object with these fields:
 
 1. "campaignTypeLabel" — A short category label (max ${charBudgets.campaignTypeLabel || 30} characters)
-   Based on the campaign type "${campaignType}", create a punchy label.
+   Create a specific, meaningful label — NOT just the generic campaign type.
+   Rules for the label:
+   - Newsletter: Use the newsletter's actual name from the campaign name (e.g., "THE INTERSECT NEWSLETTER" or "INTERSECT ISSUE #12"), NOT just "NEWSLETTER"
+   - Blog Post about an artist: Use "ARTIST PROFILE" or "Q+ART INTERVIEW" if the campaign name contains "Q+Art"
+   - Exhibition: Use the exhibition name or "EXHIBITION PREVIEW"
+   - Always derive from the campaign name "${campaignName}" and type "${campaignType}"
+   - Make it specific to THIS content, not a generic category
 
 2. "headline" — An actual QUOTE from the post content (max ${charBudgets.headline || 100} characters)
    Extract the most striking, shareable phrase someone said in the article. Enclose in quotation marks.
@@ -147,7 +153,13 @@ Generate text fields for a quotable card. Return ONLY a JSON object with these f
 Generate text fields for a cover slide card. Return ONLY a JSON object with these fields:
 
 1. "campaignTypeLabel" — A short category label (max ${charBudgets.campaignTypeLabel || 30} characters)
-   Based on the campaign type "${campaignType}", create a punchy label.
+   Create a specific, meaningful label — NOT just the generic campaign type.
+   Rules for the label:
+   - Newsletter: Use the newsletter's actual name from the campaign name (e.g., "THE INTERSECT NEWSLETTER" or "INTERSECT ISSUE #12"), NOT just "NEWSLETTER"
+   - Blog Post about an artist: Use "ARTIST PROFILE" or "Q+ART INTERVIEW" if the campaign name contains "Q+Art"
+   - Exhibition: Use the exhibition name or "EXHIBITION PREVIEW"
+   - Always derive from the campaign name "${campaignName}" and type "${campaignType}"
+   - Make it specific to THIS content, not a generic category
 
 2. "headline" — An attention-grabbing headline (max ${charBudgets.headline || 100} characters)
    Should capture the essence of this specific post/article. Use the subject and campaign name for inspiration.
