@@ -264,6 +264,31 @@ export default function CampaignDetailPage() {
   const campaign = data?.campaign;
   const posts = data?.posts ?? [];
 
+  // Auto-sync stale scheduled posts on page load.
+  // If any post is "Scheduled" with a date in the past, fire a background sync
+  // to reconcile with Zernio (catches missed webhooks).
+  const [syncDone, setSyncDone] = useState(false);
+  useEffect(() => {
+    if (!campaignId || syncDone || posts.length === 0) return;
+    const now = new Date();
+    const hasStale = posts.some(
+      (p) => p.status === "Scheduled" && p.scheduledDate && new Date(p.scheduledDate) < now
+    );
+    if (!hasStale) { setSyncDone(true); return; }
+    // Fire-and-forget sync, then refresh
+    setSyncDone(true);
+    fetch(`/api/campaigns/${campaignId}/sync`, { method: "POST" })
+      .then((res) => {
+        if (res.ok) return res.json();
+      })
+      .then((data) => {
+        if (data?.updated > 0) {
+          queryClient.invalidateQueries({ queryKey: ["campaign", campaignId] });
+        }
+      })
+      .catch(() => { /* sync failure is non-critical */ });
+  }, [campaignId, posts, syncDone, queryClient]);
+
   // Auto-open a specific post if ?postId= is in the URL (e.g., from dashboard approval queue)
   const [autoOpened, setAutoOpened] = useState(false);
   useEffect(() => {
