@@ -21,6 +21,10 @@ export interface Brand {
   platformCadence: PlatformCadenceConfig | null;
   /** Instagram handle including @ (e.g., "@notrealartworld"). */
   instagramHandle: string | null;
+  /** Vercel Blob URL for white/light transparent PNG logo (for dark backgrounds). */
+  logoTransparentLight: string | null;
+  /** Vercel Blob URL for dark/black transparent PNG logo (for light backgrounds). */
+  logoTransparentDark: string | null;
   status: "Active" | "Inactive";
 }
 

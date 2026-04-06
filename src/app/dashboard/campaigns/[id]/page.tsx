@@ -2849,7 +2849,9 @@ function PostDetailView({
           platform={platformLower}
           brandId={campaign?.brandIds?.[0]}
           brandHandle={currentBrand?.instagramHandle || ""}
-          brandLogoUrl={null}
+          brandLogoUrl={currentBrand?.logoTransparentDark || currentBrand?.logoTransparentLight || null}
+          brandLogoLightUrl={currentBrand?.logoTransparentLight || null}
+          brandLogoDarkUrl={currentBrand?.logoTransparentDark || null}
           savedData={savedCoverSlideData}
           onApply={(newMediaItems) => {
             setMediaItems(newMediaItems);

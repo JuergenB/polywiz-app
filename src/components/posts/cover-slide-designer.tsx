@@ -36,6 +36,8 @@ interface CoverSlideDesignerProps {
   brandId?: string;
   brandHandle?: string;
   brandLogoUrl?: string | null;
+  brandLogoLightUrl?: string | null;
+  brandLogoDarkUrl?: string | null;
   /** Previously saved cover slide data (for re-editing) */
   savedData?: CoverSlideData | null;
   /** Called when cover slide is applied or removed */
@@ -223,6 +225,8 @@ export function CoverSlideDesigner({
   brandId,
   brandHandle,
   brandLogoUrl,
+  brandLogoLightUrl,
+  brandLogoDarkUrl,
   savedData,
   onApply,
   onRemove,
@@ -309,7 +313,7 @@ export function CoverSlideDesigner({
           templateId: tmpl.id,
           fields: {
             ...currentFields,
-            brandLogoUrl: brandLogoUrl || null,
+            brandLogoUrl: resolvedLogoUrl,
           },
           imageOffset,
           backgroundColor,
@@ -339,7 +343,7 @@ export function CoverSlideDesigner({
           templateId: selectedTemplate.id,
           fields: {
             ...fields,
-            brandLogoUrl: brandLogoUrl || null,
+            brandLogoUrl: resolvedLogoUrl,
           },
           imageOffset,
           backgroundColor,
@@ -425,6 +429,21 @@ export function CoverSlideDesigner({
   const isLoading = previewMutation.isPending || generateContentMutation.isPending;
   const isApplying = applyMutation.isPending;
   const aspectRatio = ["linkedin", "bluesky"].includes(platform.toLowerCase()) ? "1/1" : "4/5";
+
+  // Choose logo variant based on template background color (or user-picked bg)
+  const resolvedLogoUrl = (() => {
+    const bg = backgroundColor || selectedTemplateRef.current?.colorScheme?.background || "#FFFFFF";
+    // Simple luminance check: dark bg → light logo, light bg → dark logo
+    const hex = bg.replace("#", "");
+    if (hex.length === 6) {
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      const lum = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+      return lum < 0.5 ? (brandLogoLightUrl || brandLogoDarkUrl) : (brandLogoDarkUrl || brandLogoLightUrl);
+    }
+    return brandLogoDarkUrl || brandLogoLightUrl || brandLogoUrl;
+  })() || null;
 
   // Lightbox for full-size preview
   const [showLightbox, setShowLightbox] = useState(false);

@@ -31,6 +31,8 @@ interface BrandFields {
   Timezone: string;
   "Platform Cadence": string;
   "Instagram Handle": string;
+  "Logo Transparent Light": string;
+  "Logo Transparent Dark": string;
   Status: "Active" | "Inactive";
 }
 
@@ -60,6 +62,8 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     timezone: r.fields.Timezone || null,
     platformCadence: parseCadenceJson(r.fields["Platform Cadence"]),
     instagramHandle: r.fields["Instagram Handle"] || null,
+    logoTransparentLight: r.fields["Logo Transparent Light"] || null,
+    logoTransparentDark: r.fields["Logo Transparent Dark"] || null,
     status: r.fields.Status || "Active",
   };
 }
