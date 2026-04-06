@@ -726,8 +726,8 @@ export async function renderCoverSlide(
         const maxLogoH = Math.round(brandingBandEntry.height - padding * 2);
         const maxLogoW = Math.round(width * 0.15);
 
-        // Match the accent/label opacity from the color scheme (~55% on light, ~60% on dark)
-        const logoOpacity = bgLum > 0.5 ? 0.55 : 0.60;
+        // Subtle logo: light enough to read as a watermark, not a stamp
+        const logoOpacity = bgLum > 0.5 ? 0.35 : 0.40;
 
         const resizedLogo = await sharp(logoBuffer)
           .resize(maxLogoW, maxLogoH, { fit: "inside" })
