@@ -642,6 +642,14 @@ export async function renderCoverSlide(
 
         const resizedLogo = await sharp(logoBuffer)
           .resize(maxLogoW, maxLogoH, { fit: "inside" })
+          .ensureAlpha()
+          // Apply 75% opacity so logo is subtle, not dominating
+          .composite([{
+            input: Buffer.from([0, 0, 0, Math.round(255 * 0.75)]),
+            raw: { width: 1, height: 1, channels: 4 },
+            tile: true,
+            blend: "dest-in",
+          }])
           .png()
           .toBuffer();
 
