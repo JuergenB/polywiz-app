@@ -680,8 +680,8 @@ export async function renderCoverSlide(
   // "Link in bio" subtle text in bottom-right corner
   if (options.showLinkInBio) {
     const libText = "Link in bio";
-    const libFontSize = 16;
-    const libPadding = 20;
+    const libFontSize = 24;
+    const libPadding = 24;
     // Use scheme-aware color at very low opacity
     const libColor = bgLum > 0.5 ? "rgba(0,0,0,0.30)" : "rgba(255,255,255,0.30)";
 
