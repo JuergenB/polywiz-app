@@ -2031,7 +2031,7 @@ function PostDetailView({
   };
 
   const handleSlideClick = (e: React.MouseEvent<HTMLImageElement>, slideIndex: number) => {
-    if (!eyedropperMode || eyedropperMode.slideIndex !== slideIndex) return;
+    if (!eyedropperMode) return;
     e.stopPropagation();
     const color = getPixelColor(e);
     if (!color) return;
@@ -2959,8 +2959,6 @@ function PostDetailView({
                       )}
                       onClick={(e) => {
                         if (eyedropperMode) {
-                          // Update the eyedropper to target this specific slide
-                          setEyedropperMode({ slideIndex: idx, mode: eyedropperMode.mode });
                           handleSlideClick(e, idx);
                         }
                       }}
