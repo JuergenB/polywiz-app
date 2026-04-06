@@ -181,6 +181,8 @@ export interface CoverSlideRenderOptions {
   colorSchemeOverrides?: Partial<ColorScheme>;
   /** Per-field font size overrides (delta from template default, e.g., +4 or -2) */
   fontSizeDeltas?: Record<string, number>;
+  /** Show a subtle "Link in bio" text in the bottom-right corner */
+  showLinkInBio?: boolean;
 }
 
 /** Result from the renderer */
@@ -209,5 +211,6 @@ export interface CoverSlideData {
   imageOffset: number;
   /** Per-field font size deltas from template default */
   fontSizeDeltas?: Record<string, number>;
+  showLinkInBio?: boolean;
   appliedUrl?: string;
 }

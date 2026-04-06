@@ -55,6 +55,7 @@ export async function POST(
     const imageOffset: number = body.imageOffset ?? 30;
     const backgroundColor: string | undefined = body.backgroundColor;
     const fontSizeDeltas: Record<string, number> | undefined = body.fontSizeDeltas;
+    const showLinkInBio: boolean = body.showLinkInBio === true;
     const platform: string = body.platform || "instagram";
 
     if (!templateId) {
@@ -126,6 +127,7 @@ export async function POST(
       imageOffset,
       colorSchemeOverrides,
       fontSizeDeltas,
+      showLinkInBio,
     });
 
     if (!apply) {
@@ -162,6 +164,7 @@ export async function POST(
       },
       imageOffset,
       fontSizeDeltas,
+      showLinkInBio,
       appliedUrl: coverUrl,
     };
 

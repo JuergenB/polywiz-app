@@ -409,6 +409,7 @@ export async function renderCoverSlide(
   // --- Step 1: Create base canvas with background color ---
   const bgColor = scheme.background;
   const bgRgb = hexToRgb(bgColor);
+  const bgLum = (0.299 * bgRgb.r + 0.587 * bgRgb.g + 0.114 * bgRgb.b) / 255;
 
   // --- Step 2: Fetch and crop the background image ---
   let imageComposite: sharp.OverlayOptions | null = null;
@@ -640,12 +641,14 @@ export async function renderCoverSlide(
         const maxLogoH = Math.round(brandingBandEntry.height - padding * 2);
         const maxLogoW = Math.round(width * 0.15);
 
+        // Match the accent/label opacity from the color scheme (~55% on light, ~60% on dark)
+        const logoOpacity = bgLum > 0.5 ? 0.55 : 0.60;
+
         const resizedLogo = await sharp(logoBuffer)
           .resize(maxLogoW, maxLogoH, { fit: "inside" })
           .ensureAlpha()
-          // Apply 75% opacity so logo is subtle, not dominating
           .composite([{
-            input: Buffer.from([0, 0, 0, Math.round(255 * 0.75)]),
+            input: Buffer.from([0, 0, 0, Math.round(255 * logoOpacity)]),
             raw: { width: 1, height: 1, channels: 4 },
             tile: true,
             blend: "dest-in",
@@ -672,6 +675,41 @@ export async function renderCoverSlide(
     } catch {
       // Logo fetch failed — skip silently
     }
+  }
+
+  // "Link in bio" subtle text in bottom-right corner
+  if (options.showLinkInBio) {
+    const libText = "Link in bio";
+    const libFontSize = 16;
+    const libPadding = 20;
+    // Use scheme-aware color at very low opacity
+    const libColor = bgLum > 0.5 ? "rgba(0,0,0,0.30)" : "rgba(255,255,255,0.30)";
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const libElement: any = {
+      type: "div",
+      props: {
+        style: {
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "flex-end",
+          width,
+          height,
+          paddingRight: libPadding,
+          paddingBottom: libPadding,
+          color: libColor,
+          fontSize: libFontSize,
+          fontFamily: "Noto Sans",
+          fontWeight: 400,
+          letterSpacing: 0.5,
+        },
+        children: libText,
+      },
+    };
+
+    const libSvg = await satori(libElement, { width, height, fonts });
+    const libOverlay = await sharp(Buffer.from(libSvg)).png().toBuffer();
+    composites.push({ input: libOverlay, left: 0, top: 0 });
   }
 
   const buffer = await sharp({

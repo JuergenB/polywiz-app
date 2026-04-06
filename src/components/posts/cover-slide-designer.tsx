@@ -250,6 +250,7 @@ export function CoverSlideDesigner({
     savedData?.fontSizeDeltas || {}
   );
   const [showLogo, setShowLogo] = useState(true);
+  const [showLinkInBio, setShowLinkInBio] = useState(false);
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -319,6 +320,7 @@ export function CoverSlideDesigner({
           imageOffset,
           backgroundColor,
           fontSizeDeltas,
+          showLinkInBio,
           platform,
         }),
       });
@@ -348,6 +350,8 @@ export function CoverSlideDesigner({
           },
           imageOffset,
           backgroundColor,
+          fontSizeDeltas,
+          showLinkInBio,
           platform,
         }),
       });
@@ -380,7 +384,7 @@ export function CoverSlideDesigner({
       requestPreview();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo]);
+  }, [imageOffset, backgroundColor, fontSizeDeltas, showLogo, showLinkInBio]);
 
   // Handle template selection
   const handleTemplateSelect = (template: CoverSlideTemplate) => {
@@ -799,6 +803,17 @@ export function CoverSlideDesigner({
               <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Include brand logo</span>
             </label>
           )}
+
+          {/* Link in bio toggle */}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={showLinkInBio}
+              onChange={(e) => { setShowLinkInBio(e.target.checked); }}
+              className="rounded border-zinc-600 bg-zinc-800 text-blue-500 h-3.5 w-3.5"
+            />
+            <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Link in bio</span>
+          </label>
         </div>
       </div>
 
