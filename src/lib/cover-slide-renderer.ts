@@ -375,6 +375,63 @@ function truncateToFit(
 }
 
 // ---------------------------------------------------------------------------
+// High-key / Low-key image processing
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a high-key (very light, low contrast) version of an image.
+ * Used as a subtle background texture behind text on quote cards.
+ * Optional tint shifts the high-key toward a specific color.
+ */
+async function applyHighKey(
+  buffer: Buffer,
+  tint?: { r: number; g: number; b: number }
+): Promise<Buffer> {
+  // Pass 1: Boost brightness, kill saturation
+  let pipeline = sharp(buffer)
+    .modulate({ brightness: 2.0, saturation: 0.15 });
+
+  // Apply tint if provided (shifts the image toward the tint color)
+  if (tint) {
+    pipeline = pipeline.tint(tint);
+  }
+
+  const pass1 = await pipeline.toBuffer();
+
+  // Pass 2: Crush contrast toward white (output = input * 0.25 + 195)
+  return sharp(pass1)
+    .linear(0.25, 195)
+    .blur(2)
+    .toBuffer();
+}
+
+/**
+ * Create a low-key (very dark, low contrast) version of an image.
+ * Used as a moody background behind light text on dark quote cards.
+ * Optional tint shifts the low-key toward a specific color.
+ */
+async function applyLowKey(
+  buffer: Buffer,
+  tint?: { r: number; g: number; b: number }
+): Promise<Buffer> {
+  // Pass 1: Reduce brightness, kill saturation
+  let pipeline = sharp(buffer)
+    .modulate({ brightness: 0.3, saturation: 0.2 });
+
+  if (tint) {
+    pipeline = pipeline.tint(tint);
+  }
+
+  const pass1 = await pipeline.toBuffer();
+
+  // Pass 2: Crush contrast toward black (output = input * 0.25 + 15)
+  return sharp(pass1)
+    .linear(0.25, 15)
+    .blur(2)
+    .toBuffer();
+}
+
+// ---------------------------------------------------------------------------
 // Main renderer
 // ---------------------------------------------------------------------------
 
@@ -411,8 +468,36 @@ export async function renderCoverSlide(
   const bgRgb = hexToRgb(bgColor);
   const bgLum = (0.299 * bgRgb.r + 0.587 * bgRgb.g + 0.114 * bgRgb.b) / 255;
 
-  // --- Step 2: Fetch and crop the background image ---
+  // --- Step 2: Fetch and process the background image ---
   let imageComposite: sharp.OverlayOptions | null = null;
+
+  // For templates WITHOUT an image band (e.g., Quotable Card):
+  // Use the primary image as a full-bleed high-key/low-key background
+  if (!imageBandEntry && content.primaryImage) {
+    try {
+      const response = await fetch(content.primaryImage);
+      if (response.ok) {
+        const imgBuffer = Buffer.from(await response.arrayBuffer());
+
+        // Scale to fill entire canvas
+        const resized = await sharp(imgBuffer)
+          .resize(width, height, { fit: "cover" })
+          .toBuffer();
+
+        // Apply high-key or low-key based on background luminance
+        // Use background color as a tint hint
+        const processed = bgLum > 0.5
+          ? await applyHighKey(resized, bgRgb)
+          : await applyLowKey(resized, bgRgb);
+
+        imageComposite = { input: processed, left: 0, top: 0 };
+      }
+    } catch {
+      // Image fetch failed — fall back to solid background
+    }
+  }
+
+  // For templates WITH an image band: crop to fit the band
   if (imageBandEntry && content.primaryImage) {
     const imgBand = imageBandEntry.band as ImageBand;
     const offset = imageOffset ?? imgBand.verticalOffset ?? 0;
