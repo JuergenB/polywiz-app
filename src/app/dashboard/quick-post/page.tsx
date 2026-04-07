@@ -271,10 +271,18 @@ export default function QuickPostPage() {
           const data = await res.json();
           const posts = data.posts ?? [];
           if (posts.length > 0) {
-            // Use the latest post for our platform
+            // Use the generated post for our platform (not the empty phantom)
             const platformPost = posts.find(
+              (p: Post) => toPlatformId(p.platform) === selectedPlatform && p.content
+            ) || posts.find(
               (p: Post) => toPlatformId(p.platform) === selectedPlatform
             ) || posts[0];
+
+            // Clean up the original empty phantom post if generation created a new one
+            if (targetPost && platformPost.id !== targetPost.id) {
+              fetch(`/api/posts/${targetPost.id}`, { method: "DELETE" }).catch(() => {});
+            }
+
             setPost(platformPost);
             setCampaign(data.campaign);
           }
@@ -462,6 +470,7 @@ export default function QuickPostPage() {
           {/* Editor section */}
           {post ? (
             <QuickPostEditor
+              key={post.id + "-" + (post.content?.length || 0)}
               post={post}
               campaign={campaign!}
               platform={selectedPlatform}
@@ -552,6 +561,13 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
   const [isPublishing, setIsPublishing] = useState(false);
 
   const approveAndPublish = async (scheduledFor?: string) => {
+    // Save any unsaved content first
+    if (content.editedContent !== (post.content || "")) {
+      content.saveContent();
+      // Wait briefly for save to complete
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+
     // First approve, then publish
     setIsPublishing(true);
     try {
@@ -741,21 +757,27 @@ function QuickPostEditor({ post, campaign, platform, invalidateKeys, onPostUpdat
             />
           )}
 
-          {/* Content editor - always in editing mode */}
-          <ContentEditor
-            content={post.content || ""}
-            platform={platformLower}
-            readOnly={isPublished}
-            alwaysEditing
-            isEditing={true}
-            editedContent={content.editedContent}
-            onEditedContentChange={content.setEditedContent}
-            onStartEditing={content.startEditing}
-            onCancelEditing={content.cancelEditing}
-            onSave={content.saveContent}
-            isSaving={content.saveContentMutation.isPending}
-            saveDisabled={content.editedContent === (post.content || "")}
-          />
+          {/* Content editor - always in editing mode, saves on blur */}
+          <div onBlur={() => {
+            if (content.editedContent !== (post.content || "")) {
+              content.saveContent();
+            }
+          }}>
+            <ContentEditor
+              content={post.content || ""}
+              platform={platformLower}
+              readOnly={isPublished}
+              alwaysEditing
+              isEditing={true}
+              editedContent={content.editedContent}
+              onEditedContentChange={content.setEditedContent}
+              onStartEditing={content.startEditing}
+              onCancelEditing={content.cancelEditing}
+              onSave={content.saveContent}
+              isSaving={content.saveContentMutation.isPending}
+              saveDisabled={content.editedContent === (post.content || "")}
+            />
+          </div>
 
           {/* Action bar */}
           <div className="flex items-center gap-2 pt-2 border-t border-border">
