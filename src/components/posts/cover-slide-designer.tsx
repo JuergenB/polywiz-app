@@ -426,7 +426,7 @@ export function CoverSlideDesigner({
           fontSizeDeltas,
           showLinkInBio,
           platform,
-          sourceImageIndex: sourceImages.length > 0 ? sourceImageIndex : undefined,
+          sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to generate preview");
@@ -458,7 +458,7 @@ export function CoverSlideDesigner({
           fontSizeDeltas,
           showLinkInBio,
           platform,
-          sourceImageIndex: sourceImages.length > 0 ? sourceImageIndex : undefined,
+          sourceImageUrl: sourceImages[sourceImageIndex]?.url || undefined,
         }),
       });
       if (!res.ok) throw new Error("Failed to apply cover slide");

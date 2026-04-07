@@ -57,7 +57,7 @@ export async function POST(
     const fontSizeDeltas: Record<string, number> | undefined = body.fontSizeDeltas;
     const showLinkInBio: boolean = body.showLinkInBio === true;
     const platform: string = body.platform || "instagram";
-    const sourceImageIndex: number | undefined = typeof body.sourceImageIndex === "number" ? body.sourceImageIndex : undefined;
+    const sourceImageUrl: string | undefined = typeof body.sourceImageUrl === "string" ? body.sourceImageUrl : undefined;
 
     if (!templateId) {
       return NextResponse.json({ error: "templateId is required" }, { status: 400 });
@@ -83,8 +83,8 @@ export async function POST(
     const currentMediaItems = parseMediaItems(post.fields);
 
     // Determine which image to use as the background.
-    // If sourceImageIndex is provided, use that image from the raw/original media.
-    // Otherwise, fall back to the first image (original or current).
+    // If sourceImageUrl is provided, use that exact URL.
+    // Otherwise, fall back to the first raw/original image.
     const rawItems: MediaItem[] = (() => {
       if (post.fields["Original Media"]) {
         try {
@@ -95,8 +95,13 @@ export async function POST(
       return currentMediaItems;
     })();
 
-    const imgIdx = sourceImageIndex ?? 0;
-    let primaryImage = rawItems[imgIdx]?.url || rawItems[0]?.url;
+    let primaryImage: string | undefined;
+    if (sourceImageUrl) {
+      // Use the exact URL the client specified (avoids index mismatch issues)
+      primaryImage = sourceImageUrl;
+    } else {
+      primaryImage = rawItems[0]?.url;
+    }
 
     if (!primaryImage) {
       return NextResponse.json(
