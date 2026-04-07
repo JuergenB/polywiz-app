@@ -116,7 +116,7 @@ function FontSizeControls({
 function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
   const scheme = template.colorScheme;
   const bands = template.bands;
-  const hasImage = bands.some((b) => b.type === "image");
+  const isQuotable = template.slug.includes("quotable");
   const bgColor = scheme.background || "#FFFFFF";
   const primaryColor = scheme.primary || "#1A1A1A";
   const secondaryColor = scheme.secondary || "rgba(30,30,30,0.72)";
@@ -132,7 +132,7 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
   };
 
   return (
-    <div className="h-full w-full flex flex-col" style={{ backgroundColor: bgColor }}>
+    <div className="h-full w-full flex flex-col relative" style={{ backgroundColor: bgColor }}>
       {bands.map((band, i) => {
         const h = typeof band.height === "string" && band.height.endsWith("%")
           ? band.height
@@ -159,11 +159,82 @@ function TemplateSchemPreview({ template }: { template: CoverSlideTemplate }) {
           const isLabel = band.contentSource === "campaignTypeLabel";
           const isHeadline = band.contentSource === "headline";
           const isHandle = band.contentSource === "handle";
+          const isDescription = band.contentSource === "description";
 
-          // Bar-style placeholder: width and height represent text prominence
+          if (isQuotable) {
+            // Quotable templates: centered, wider lines resembling quote text
+            if (isLabel) {
+              return (
+                <div
+                  key={i}
+                  className="flex justify-center px-4"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 6),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 4),
+                  }}
+                >
+                  <div className="rounded-full" style={{ height: 3, width: "35%", backgroundColor: color, opacity: 0.3 }} />
+                </div>
+              );
+            }
+            if (isHeadline) {
+              // Wide, prominent italic-style lines — the quote itself
+              return (
+                <div
+                  key={i}
+                  className="flex flex-col items-center gap-1.5 px-3"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 4),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 6),
+                  }}
+                >
+                  {/* Opening quote mark */}
+                  <div style={{ fontSize: 14, lineHeight: 1, color, opacity: 0.25, fontFamily: "Georgia, serif" }}>&ldquo;</div>
+                  {[92, 88, 70].map((w, li) => (
+                    <div
+                      key={li}
+                      className="rounded-full"
+                      style={{ height: 5, width: `${w}%`, backgroundColor: color, opacity: 0.3 }}
+                    />
+                  ))}
+                </div>
+              );
+            }
+            if (isDescription) {
+              return (
+                <div
+                  key={i}
+                  className="flex flex-col items-center gap-1 px-4"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 4),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 4),
+                  }}
+                >
+                  <div className="rounded-full" style={{ height: 4, width: "55%", backgroundColor: color, opacity: 0.25 }} />
+                  <div className="rounded-full" style={{ height: 4, width: "40%", backgroundColor: color, opacity: 0.25 }} />
+                </div>
+              );
+            }
+            if (isHandle) {
+              return (
+                <div
+                  key={i}
+                  className="flex justify-center px-4"
+                  style={{
+                    paddingTop: Math.min((band.paddingTop || 0) / 3, 4),
+                    paddingBottom: Math.min((band.paddingBottom || 0) / 3, 6),
+                  }}
+                >
+                  <div className="rounded-full" style={{ height: 3, width: "30%", backgroundColor: color, opacity: 0.25 }} />
+                </div>
+              );
+            }
+          }
+
+          // Editorial / default templates: bar-style placeholders
           const barH = isLabel ? 4 : isHeadline ? 6 : 4;
           const barW = isLabel ? "40%" : isHeadline ? "75%" : isHandle ? "35%" : "65%";
-          const lines = isHeadline ? 3 : band.contentSource === "description" ? 2 : 1;
+          const lines = isHeadline ? 3 : isDescription ? 2 : 1;
 
           return (
             <div
