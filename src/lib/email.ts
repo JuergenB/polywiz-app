@@ -1,8 +1,8 @@
 import { Resend } from "resend"
 
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME || "PolyWiz"
-const APP_URL = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3025"
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "noreply@polymash.com"
+const APP_NAME = (process.env.NEXT_PUBLIC_APP_NAME || "PolyWiz").trim()
+const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3025").trim()
+const FROM_EMAIL = (process.env.RESEND_FROM_EMAIL || "noreply@polymash.com").trim()
 
 let _resend: Resend | null = null
 function getResend(): Resend {
@@ -86,13 +86,13 @@ export async function sendPasswordResetEmail(
     })
 
     if (error) {
-      console.error("Failed to send password reset email:", JSON.stringify(error))
-      throw new Error(`Resend error: ${JSON.stringify(error)}`)
+      console.error("[email] Resend error:", JSON.stringify(error))
+      return false
     }
 
     return true
   } catch (err) {
-    console.error("Email send error:", err)
-    throw err
+    console.error("[email] Send error:", err)
+    return false
   }
 }

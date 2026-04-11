@@ -277,52 +277,49 @@ export default function DashboardPage() {
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-8">
 
       {/* ── Hero Section ───────────────────────────────────────── */}
-      <div className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/5 via-background to-primary/10 p-6">
-        <div className="flex items-start justify-between">
-          <div className="space-y-2">
-            <div className="flex items-center gap-3">
-              <Logo size="md" showText={false} />
-              <div>
-                <h1 className="text-xl font-semibold tracking-tight">
-                  {currentBrand.name}
-                </h1>
-                <p className="text-sm text-muted-foreground">
-                  Turn any URL into a multi-platform social media campaign — automated, scheduled, ready to publish.
-                </p>
-              </div>
-            </div>
-            {data.summary && (
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1 pt-1 text-sm">
-                <span className="flex items-center gap-1.5">
-                  <Send className="h-3.5 w-3.5 text-green-500" />
-                  <span className="font-semibold">{data.summary.totalPublished}</span>
-                  <span className="text-muted-foreground">published</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Layers className="h-3.5 w-3.5 text-primary" />
-                  <span className="font-semibold">{data.summary.totalPosts}</span>
-                  <span className="text-muted-foreground">total posts</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Megaphone className="h-3.5 w-3.5 text-primary" />
-                  <span className="font-semibold">{data.summary.totalCampaigns}</span>
-                  <span className="text-muted-foreground">{data.summary.totalCampaigns === 1 ? "campaign" : "campaigns"}</span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Sparkles className="h-3.5 w-3.5 text-primary" />
-                  <span className="font-semibold">{data.summary.platformsUsed}</span>
-                  <span className="text-muted-foreground">{data.summary.platformsUsed === 1 ? "platform" : "platforms"}</span>
-                </span>
-              </div>
-            )}
+      <div className="relative overflow-hidden rounded-xl border border-border bg-gradient-to-br from-primary/5 via-background to-primary/10 px-6 py-5">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Logo size="sm" showText={true} />
+            <span className="text-muted-foreground">·</span>
+            <h1 className="text-lg font-semibold tracking-tight">
+              {currentBrand.name}
+            </h1>
           </div>
-          <Button asChild className="shrink-0">
+          <Button asChild className="shrink-0 ml-6">
             <Link href="/dashboard/campaigns/new">
               <Plus className="h-4 w-4 mr-1.5" />
               New Campaign
             </Link>
           </Button>
         </div>
+        <p className="text-sm text-muted-foreground mb-3">
+          Turn any URL into a multi-platform social media campaign — automated, scheduled, ready to publish.
+        </p>
+        {data.summary && (
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1 text-sm">
+            <span className="flex items-center gap-1.5">
+              <Send className="h-3.5 w-3.5 text-green-500" />
+              <span className="font-semibold">{data.summary.totalPublished}</span>
+              <span className="text-muted-foreground">published</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Layers className="h-3.5 w-3.5 text-primary" />
+              <span className="font-semibold">{data.summary.totalPosts}</span>
+              <span className="text-muted-foreground">total posts</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Megaphone className="h-3.5 w-3.5 text-primary" />
+              <span className="font-semibold">{data.summary.totalCampaigns}</span>
+              <span className="text-muted-foreground">{data.summary.totalCampaigns === 1 ? "campaign" : "campaigns"}</span>
+            </span>
+            <span className="flex items-center gap-1.5">
+              <Sparkles className="h-3.5 w-3.5 text-primary" />
+              <span className="font-semibold">{data.summary.platformsUsed}</span>
+              <span className="text-muted-foreground">{data.summary.platformsUsed === 1 ? "platform" : "platforms"}</span>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Account health warning */}
