@@ -34,9 +34,10 @@ export async function sendPasswordResetEmail(
     <tr><td align="center">
       <table role="presentation" width="480" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
 
-        <!-- Header with brand color -->
-        <tr><td style="background-color:#0399FE;padding:28px 32px;text-align:center;">
-          <span style="color:#ffffff;font-size:22px;font-weight:700;letter-spacing:-0.3px;">✦ ${APP_NAME}</span>
+        <!-- Header with logo -->
+        <tr><td style="padding:32px 32px 8px;text-align:center;">
+          <img src="${APP_URL}/logo.png" alt="${APP_NAME}" width="40" height="40" style="display:inline-block;vertical-align:middle;margin-right:8px;" />
+          <span style="font-size:24px;font-weight:700;color:#18181b;letter-spacing:-0.3px;vertical-align:middle;">${APP_NAME}</span>
         </td></tr>
 
         <!-- Body -->
