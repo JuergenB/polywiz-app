@@ -87,12 +87,12 @@ function toPlatformId(val: string): Platform {
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
-  instagram: "#E1306C",
+  instagram: "#F77737",
   threads: "#000000",
   bluesky: "#0085FF",
   linkedin: "#0A66C2",
   facebook: "#1877F2",
-  pinterest: "#E60023",
+  pinterest: "#BD081C",
   twitter: "#1DA1F2",
 };
 
