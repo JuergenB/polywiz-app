@@ -1,6 +1,8 @@
+import { headers } from "next/headers"
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
 import { fetchUserByEmail } from "@/lib/airtable/client"
+import { clearRateLimit } from "@/lib/rate-limit"
 import type { UserRole } from "@/lib/airtable/types"
 
 export type { UserRole }
@@ -55,6 +57,18 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             u.password === credentials.password
         )
         if (!user) return null
+
+        // Clear rate limit on successful login
+        try {
+          const hdrs = await headers()
+          const ip =
+            hdrs.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+            hdrs.get("x-real-ip") ||
+            "unknown"
+          clearRateLimit(ip)
+        } catch {
+          // headers() may not be available in all contexts
+        }
 
         // Fetch brand access from Airtable Users table
         const profile = await fetchUserByEmail(user.email)

@@ -3,11 +3,11 @@
 import { useState } from "react"
 import { signIn } from "next-auth/react"
 import { useRouter } from "next/navigation"
-import { Calendar } from "lucide-react"
+import { Logo } from "@/components/shared"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader } from "@/components/ui/card"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -20,6 +20,16 @@ export default function LoginPage() {
     setLoading(true)
 
     const form = new FormData(e.currentTarget)
+
+    // Honeypot — bots will fill this hidden field
+    if (form.get("website")) {
+      // Silently reject but pretend to process
+      await new Promise((r) => setTimeout(r, 1500))
+      setError("Invalid email or password.")
+      setLoading(false)
+      return
+    }
+
     const result = await signIn("credentials", {
       email: form.get("email"),
       password: form.get("password"),
@@ -27,7 +37,11 @@ export default function LoginPage() {
     })
 
     if (result?.error) {
-      setError("Invalid email or password.")
+      setError(
+        result.status === 429
+          ? "Too many login attempts. Please try again in a few minutes."
+          : "Invalid email or password."
+      )
       setLoading(false)
     } else {
       router.push("/dashboard")
@@ -37,16 +51,26 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <Card className="w-full max-w-sm">
-        <CardHeader className="text-center space-y-3">
-          <div className="flex justify-center">
-            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <Calendar className="h-6 w-6" />
-            </div>
-          </div>
-          <CardTitle className="text-xl">Promo Scheduler</CardTitle>
+        <CardHeader className="flex flex-col items-center space-y-1 pb-2">
+          <Logo size="lg" />
+          <p className="text-sm text-muted-foreground">
+            Sign in to your account
+          </p>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Honeypot field — hidden from real users, bots auto-fill it */}
+            <div aria-hidden="true" className="absolute -left-[9999px]">
+              <label htmlFor="website">Website</label>
+              <input
+                type="text"
+                id="website"
+                name="website"
+                tabIndex={-1}
+                autoComplete="off"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
