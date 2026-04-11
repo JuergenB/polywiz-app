@@ -15,15 +15,23 @@ export async function GET() {
     NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL || "NOT SET",
   }
 
+  // Test Resend directly to bypass our wrapper
   try {
-    const sent = await sendPasswordResetEmail(
-      "juergen@polymash.com",
-      "test-token-diagnostic-only"
-    )
-    diagnostics.emailSent = sent
+    const { Resend } = await import("resend")
+    const resend = new Resend(process.env.RESEND_API_KEY)
+    const { data, error } = await resend.emails.send({
+      from: `PolyWiz <${process.env.RESEND_FROM_EMAIL || "noreply@polymash.com"}>`,
+      to: "juergen@polymash.com",
+      subject: "PolyWiz production email test",
+      html: "<p>This is a direct Resend API test from production.</p>",
+    })
+    diagnostics.resendData = data
+    diagnostics.resendError = error
+    diagnostics.emailSent = !error
   } catch (err) {
     diagnostics.emailSent = false
     diagnostics.error = err instanceof Error ? err.message : String(err)
+    diagnostics.stack = err instanceof Error ? err.stack?.split("\n").slice(0, 3) : undefined
   }
 
   return NextResponse.json(diagnostics)
