@@ -86,13 +86,13 @@ export async function sendPasswordResetEmail(
     })
 
     if (error) {
-      console.error("Failed to send password reset email:", error)
-      return false
+      console.error("Failed to send password reset email:", JSON.stringify(error))
+      throw new Error(`Resend error: ${JSON.stringify(error)}`)
     }
 
     return true
   } catch (err) {
     console.error("Email send error:", err)
-    return false
+    throw err
   }
 }
