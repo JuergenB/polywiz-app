@@ -79,6 +79,7 @@ interface DashboardStats {
       id: string;
       platform: string;
       content: string;
+      campaignId: string;
       campaignName: string;
       zernioPostId: string;
     }>;
@@ -520,13 +521,18 @@ export default function DashboardPage() {
               </div>
               <CardContent className="pt-0 space-y-2">
                 {data.posts.failedPosts.map((post) => (
-                  <div key={post.id} className="flex items-center gap-3 rounded-lg bg-red-50 dark:bg-red-950/30 p-3">
+                  <Link
+                    key={post.id}
+                    href={`/dashboard/campaigns/${post.campaignId}?postId=${post.id}`}
+                    className="flex items-center gap-3 rounded-lg bg-red-50 dark:bg-red-950/30 p-3 hover:bg-red-100 dark:hover:bg-red-950/50 transition-colors cursor-pointer"
+                  >
                     <PlatformIcon platform={toPlatformId(post.platform)} size="sm" />
                     <div className="flex-1 min-w-0">
                       <p className="text-sm truncate">{post.content}</p>
                       <p className="text-xs text-muted-foreground">{post.campaignName}</p>
                     </div>
-                  </div>
+                    <ArrowRight className="h-4 w-4 text-red-400 shrink-0" />
+                  </Link>
                 ))}
               </CardContent>
             </Card>

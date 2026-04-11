@@ -165,6 +165,7 @@ export async function GET(request: NextRequest) {
           id: p.id,
           platform: p.fields.Platform,
           content: (p.fields.Content || "").slice(0, 80),
+          campaignId: campaign?.id,
           campaignName: campaign?.fields.Name || "Unknown",
           zernioPostId: p.fields["Zernio Post ID"],
         };
