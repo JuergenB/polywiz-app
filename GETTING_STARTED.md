@@ -22,7 +22,7 @@ npm run dev
 | kbviking@gmail.com | curator | Not Real Art | Review/approve NRA campaigns |
 | elise@example.com | curator | Artsville USA | Review/approve Artsville campaigns |
 
-Password for all: `REDACTED_PASSWORD` (development only)
+Password for all: set in `POLYWIZ_APP_PASSWORD` env var (see `.env.local`)
 
 User-to-brand mapping is in the **Airtable Users table** (`tblyUmt78haC25nPZ`). Changing brand access does not require a redeploy — update the Airtable record and the user's next login picks up the change.
 

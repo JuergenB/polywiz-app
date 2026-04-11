@@ -34,7 +34,7 @@ async function main() {
   console.log("Logging in...");
   await page.goto(`${BASE_URL}/login`, { waitUntil: "networkidle2", timeout: 15000 });
   await page.type('input[name="email"]', "kbviking@gmail.com");
-  await page.type('input[name="password"]', "REDACTED_PASSWORD");
+  await page.type('input[name="password"]', process.env.POLYWIZ_APP_PASSWORD);
   await page.click('button[type="submit"]');
   await sleep(3000);
   console.log("Logged in");

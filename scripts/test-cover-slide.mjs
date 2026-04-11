@@ -10,7 +10,7 @@ const BASE = 'http://localhost:3025';
 const CAMPAIGN_ID = 'recNOknn765LjOlp3';
 const SCREENSHOT_DIR = '/tmp/cover-slide-test';
 const EMAIL = 'juergen@polymash.com';
-const PASSWORD = 'REDACTED_PASSWORD';
+const PASSWORD = process.env.POLYWIZ_APP_PASSWORD;
 
 async function main() {
   const browser = await puppeteer.launch({

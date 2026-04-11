@@ -214,7 +214,7 @@ Deploy to Vercel with all per-brand env vars and multi-user auth working.
 
 ### Pre-deployment checklist
 - [ ] All per-brand API keys in Vercel env vars
-- [ ] AUTH_USERS includes all team members with real passwords (not REDACTED_PASSWORD!)
+- [ ] AUTH_USERS includes all team members with unique per-user passwords
 - [ ] Users table seeded with brand assignments
 - [ ] Brand records have correct zernioApiKeyLabel values
 - [ ] Test build passes locally

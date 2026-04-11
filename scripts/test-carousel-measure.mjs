@@ -12,7 +12,7 @@ async function main() {
   // Sign in
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle0' });
   await page.type('input[type="email"]', 'juergen@polymash.com');
-  await page.type('input[type="password"]', 'REDACTED_PASSWORD');
+  await page.type('input[type="password"]', process.env.POLYWIZ_APP_PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 }).catch(() => {});
 
