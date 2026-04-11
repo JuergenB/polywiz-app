@@ -132,6 +132,9 @@ interface UserFields {
   Role: UserRole;
   Brands: string[];
   "Default Brand": string[];
+  "Password Hash": string;
+  "Password Reset Token": string;
+  "Token Expires": string;
 }
 
 /**
@@ -144,7 +147,7 @@ export async function fetchUserByEmail(
 ): Promise<UserProfile | null> {
   const records = await listRecords<UserFields>("Users", {
     filterByFormula: `{Email} = "${email}"`,
-    fields: ["Email", "Display Name", "Role", "Brands", "Default Brand"],
+    fields: ["Email", "Display Name", "Role", "Brands", "Default Brand", "Password Hash"],
   });
 
   if (records.length === 0) return null;
@@ -157,5 +160,83 @@ export async function fetchUserByEmail(
     role: r.fields.Role || "viewer",
     brandIds: r.fields.Brands || [],
     defaultBrandId: r.fields["Default Brand"]?.[0] || null,
+    passwordHash: r.fields["Password Hash"] || null,
   };
+}
+
+/**
+ * Store a password reset token for a user.
+ * Token expires in 1 hour.
+ */
+export async function storeResetToken(
+  email: string,
+  token: string
+): Promise<boolean> {
+  const records = await listRecords<UserFields>("Users", {
+    filterByFormula: `{Email} = "${email}"`,
+    fields: ["Email"],
+  });
+
+  if (records.length === 0) return false;
+
+  const expires = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await updateRecord("Users", records[0].id, {
+    "Password Reset Token": token,
+    "Token Expires": expires,
+  });
+  return true;
+}
+
+/**
+ * Validate a reset token and return the user record ID if valid.
+ */
+export async function validateResetToken(
+  token: string
+): Promise<{ recordId: string; email: string } | null> {
+  const records = await listRecords<UserFields>("Users", {
+    filterByFormula: `{Password Reset Token} = "${token}"`,
+    fields: ["Email", "Password Reset Token", "Token Expires"],
+  });
+
+  if (records.length === 0) return null;
+
+  const r = records[0];
+  const expires = r.fields["Token Expires"];
+  if (!expires || new Date(expires) < new Date()) return null;
+
+  return { recordId: r.id, email: r.fields.Email };
+}
+
+/**
+ * Update a user's password hash and clear the reset token.
+ */
+export async function updatePasswordHash(
+  recordId: string,
+  passwordHash: string
+): Promise<void> {
+  await updateRecord("Users", recordId, {
+    "Password Hash": passwordHash,
+    "Password Reset Token": "",
+    "Token Expires": "",
+  });
+}
+
+/**
+ * List all users (for admin user management).
+ */
+export async function listUsers(): Promise<
+  Array<{ id: string; email: string; displayName: string; role: UserRole; brandIds: string[] }>
+> {
+  const records = await listRecords<UserFields>("Users", {
+    fields: ["Email", "Display Name", "Role", "Brands"],
+    sort: [{ field: "Display Name", direction: "asc" }],
+  });
+
+  return records.map((r) => ({
+    id: r.id,
+    email: r.fields.Email || "",
+    displayName: r.fields["Display Name"] || "",
+    role: r.fields.Role || "viewer",
+    brandIds: r.fields.Brands || [],
+  }));
 }

@@ -27,7 +27,8 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette, Calendar, BookOpen } from "lucide-react";
+import { Key, Moon, Sun, Globe, LogOut, ExternalLink, Layers, Palette, Calendar, BookOpen, Lock, Users } from "lucide-react";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import { Separator } from "@/components/ui/separator";
 
@@ -37,7 +38,49 @@ export default function SettingsPage() {
   const { apiKey, usageStats, logout } = useAuthStore();
   const { timezone, setTimezone, weekStartsOn, setWeekStartsOn } = useAppStore();
 
+  const { data: session } = useSession();
   const [showApiKey, setShowApiKey] = useState(false);
+  const [pwLoading, setPwLoading] = useState(false);
+  const [pwError, setPwError] = useState("");
+  const [pwSuccess, setPwSuccess] = useState(false);
+
+  const isAdmin = session?.user?.role === "admin" || session?.user?.role === "super-admin";
+
+  async function handleChangePassword(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setPwError("");
+    setPwSuccess(false);
+    setPwLoading(true);
+
+    const form = new FormData(e.currentTarget);
+    const currentPassword = form.get("currentPassword") as string;
+    const newPassword = form.get("newPassword") as string;
+    const confirmPassword = form.get("confirmPassword") as string;
+
+    if (newPassword !== confirmPassword) {
+      setPwError("New passwords do not match.");
+      setPwLoading(false);
+      return;
+    }
+
+    const res = await fetch("/api/auth/change-password", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setPwError(data.error || "Failed to change password.");
+      setPwLoading(false);
+      return;
+    }
+
+    setPwSuccess(true);
+    setPwLoading(false);
+    (e.target as HTMLFormElement).reset();
+  }
 
   // Compute timezone options - always includes user's browser timezone and current selection
   const timezoneOptions = useMemo(
@@ -320,6 +363,86 @@ export default function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Change Password */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Lock className="h-4 w-4" />
+            Change Password
+          </CardTitle>
+          <CardDescription>
+            Update your login password.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleChangePassword} className="space-y-4 max-w-sm">
+            <div className="space-y-2">
+              <Label htmlFor="currentPassword">Current password</Label>
+              <Input
+                id="currentPassword"
+                name="currentPassword"
+                type="password"
+                autoComplete="current-password"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="newPassword">New password</Label>
+              <Input
+                id="newPassword"
+                name="newPassword"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="confirmPassword">Confirm new password</Label>
+              <Input
+                id="confirmPassword"
+                name="confirmPassword"
+                type="password"
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+            </div>
+            {pwError && <p className="text-sm text-destructive">{pwError}</p>}
+            {pwSuccess && (
+              <p className="text-sm text-green-600 dark:text-green-400">
+                Password changed successfully.
+              </p>
+            )}
+            <Button type="submit" variant="outline" disabled={pwLoading}>
+              {pwLoading ? "Changing..." : "Change Password"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Admin: User Management */}
+      {isAdmin && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Users className="h-4 w-4" />
+              User Management
+            </CardTitle>
+            <CardDescription>
+              Manage team members, reset passwords, and assign brand access.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button variant="outline" asChild>
+              <Link href="/dashboard/settings/users">
+                Manage Users
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Session */}
       <Card>

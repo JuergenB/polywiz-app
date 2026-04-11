@@ -1,6 +1,7 @@
 import { headers } from "next/headers"
 import NextAuth from "next-auth"
 import Credentials from "next-auth/providers/credentials"
+import bcrypt from "bcryptjs"
 import { fetchUserByEmail } from "@/lib/airtable/client"
 import { clearRateLimit } from "@/lib/rate-limit"
 import type { UserRole } from "@/lib/airtable/types"
@@ -51,12 +52,32 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
-        const user = users.find(
-          (u) =>
-            u.email === credentials.email &&
-            u.password === credentials.password
-        )
-        if (!user) return null
+
+        // Fetch user profile + password hash from Airtable
+        const profile = await fetchUserByEmail(credentials.email as string)
+
+        let authenticated = false
+        let fallbackUser: (typeof users)[number] | undefined
+
+        if (profile?.passwordHash) {
+          // Primary: bcrypt verification against Airtable hash
+          authenticated = await bcrypt.compare(
+            credentials.password as string,
+            profile.passwordHash
+          )
+        }
+
+        if (!authenticated) {
+          // Fallback: plaintext env var (transition period — remove after full migration)
+          fallbackUser = users.find(
+            (u) =>
+              u.email === credentials.email &&
+              u.password === credentials.password
+          )
+          authenticated = !!fallbackUser
+        }
+
+        if (!authenticated) return null
 
         // Clear rate limit on successful login
         try {
@@ -70,16 +91,17 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           // headers() may not be available in all contexts
         }
 
-        // Fetch brand access from Airtable Users table
-        const profile = await fetchUserByEmail(user.email)
+        const displayName =
+          profile?.displayName ||
+          fallbackUser?.displayName ||
+          (credentials.email as string).split("@")[0]
 
         return {
-          id: user.id,
-          name: user.displayName,
-          email: user.email,
-          displayName: user.displayName,
-          // Airtable role takes precedence, fall back to AUTH_USERS role
-          role: profile?.role || user.role,
+          id: profile?.id || fallbackUser?.id || "0",
+          name: displayName,
+          email: credentials.email as string,
+          displayName,
+          role: profile?.role || fallbackUser?.role || "viewer",
           allowedBrandIds: profile?.brandIds || [],
           defaultBrandId: profile?.defaultBrandId || null,
         }
@@ -114,8 +136,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       const isLoggedIn = !!auth?.user
       const isLoginPage = nextUrl.pathname === "/login"
       const isAuthApi = nextUrl.pathname.startsWith("/api/auth")
+      const isPublicAuthPage =
+        nextUrl.pathname === "/forgot-password" ||
+        nextUrl.pathname === "/reset-password"
 
       if (isAuthApi) return true
+      if (isPublicAuthPage) return true
       if (isLoggedIn && isLoginPage) {
         return Response.redirect(new URL("/dashboard", nextUrl))
       }

@@ -334,6 +334,7 @@ export interface UserProfile {
   role: UserRole;
   brandIds: string[];
   defaultBrandId: string | null;
+  passwordHash?: string | null;
 }
 
 // Duration presets for campaign creation
