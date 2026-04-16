@@ -1,10 +1,13 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useCallback, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Button } from "@/components/ui/button";
-import { ChevronDown, ChevronUp, Save, Users } from "lucide-react";
+import { ChevronDown, ChevronUp, Users, X } from "lucide-react";
+
+const LS_COLLABS_KEY = "polywiz-recent-collaborators";
+const LS_TAGS_KEY = "polywiz-recent-user-tags";
+const MAX_RECENT = 8;
 
 interface CollaborationSectionProps {
   postId: string;
@@ -13,12 +16,62 @@ interface CollaborationSectionProps {
   isPublished: boolean;
 }
 
-/** Parse comma-separated usernames, trim whitespace, filter empties. Preserves @ prefix. */
+/** Ensure @ prefix on a handle. */
+const ensureAt = (h: string) => (h.startsWith("@") ? h : `@${h}`);
+
+/** Strip @ for comparison. */
+const stripAt = (h: string) => h.replace(/^@/, "").toLowerCase();
+
+/** Parse comma-separated usernames, trim whitespace, ensure @ prefix, filter empties. */
 function parseUsernames(input: string): string[] {
   return input
     .split(",")
     .map((u) => u.trim())
-    .filter((u) => u.length > 0);
+    .filter((u) => u.length > 0)
+    .map(ensureAt);
+}
+
+/** Read recent handles from localStorage. */
+function getRecent(key: string): string[] {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Merge new handles into the recent list (most recent first, deduped, capped). */
+function saveRecent(key: string, handles: string[]) {
+  if (handles.length === 0) return;
+  try {
+    const existing = getRecent(key);
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const h of [...handles, ...existing]) {
+      const lc = h.toLowerCase();
+      if (!seen.has(lc)) {
+        seen.add(lc);
+        merged.push(h);
+      }
+    }
+    localStorage.setItem(key, JSON.stringify(merged.slice(0, MAX_RECENT)));
+  } catch { /* localStorage unavailable */ }
+}
+
+/** Remove a handle from the recent list in localStorage. */
+function removeRecent(key: string, handle: string) {
+  try {
+    const existing = getRecent(key);
+    localStorage.setItem(key, JSON.stringify(existing.filter((h) => h.toLowerCase() !== handle.toLowerCase())));
+  } catch { /* localStorage unavailable */ }
+}
+
+/** Append a handle to a comma-separated input value. */
+function appendHandle(currentInput: string, handle: string): string {
+  const existing = parseUsernames(currentInput);
+  if (existing.some((h) => stripAt(h) === stripAt(handle))) return currentInput;
+  return [...existing, handle].join(", ");
 }
 
 export function CollaborationSection({
@@ -30,28 +83,40 @@ export function CollaborationSection({
   const queryClient = useQueryClient();
   const contentRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
-  const [collabInput, setCollabInput] = useState(initialCollaborators.join(", "));
-  const [tagsInput, setTagsInput] = useState(initialUserTags.join(", "));
+  const [collabInput, setCollabInput] = useState(initialCollaborators.map(ensureAt).join(", "));
+  const [tagsInput, setTagsInput] = useState(initialUserTags.map(ensureAt).join(", "));
+  const [chipVersion, setChipVersion] = useState(0);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
 
   const parsedCollabs = parseUsernames(collabInput);
   const parsedTags = parseUsernames(tagsInput);
   const collabError = parsedCollabs.length > 3 ? "Maximum 3 collaborators allowed" : null;
 
-  // Summary for header — use current input values for live feedback
-  const displayCollabs = expanded ? parsedCollabs : initialCollaborators;
-  const displayTags = expanded ? parsedTags : initialUserTags;
+  // Recent handles from localStorage
+  const recentCollabs = expanded && chipVersion >= 0 ? getRecent(LS_COLLABS_KEY) : [];
+  const recentTags = expanded && chipVersion >= 0 ? getRecent(LS_TAGS_KEY) : [];
+
+  // Filter out handles already in the current input
+  const collabSet = new Set(parsedCollabs.map(stripAt));
+  const tagSet = new Set(parsedTags.map(stripAt));
+  const availableCollabs = recentCollabs.filter((h) => !collabSet.has(stripAt(h)));
+  const availableTags = recentTags.filter((h) => !tagSet.has(stripAt(h)));
+
+  // Summary — always from current input values
   const parts: string[] = [];
-  if (displayCollabs.length > 0) {
-    parts.push(`${displayCollabs.length} collaborator${displayCollabs.length > 1 ? "s" : ""}`);
+  if (parsedCollabs.length > 0) {
+    parts.push(`${parsedCollabs.length} collaborator${parsedCollabs.length > 1 ? "s" : ""}`);
   }
-  if (displayTags.length > 0) {
-    parts.push(`${displayTags.length} tag${displayTags.length > 1 ? "s" : ""}`);
+  if (parsedTags.length > 0) {
+    parts.push(`${parsedTags.length} tag${parsedTags.length > 1 ? "s" : ""}`);
   }
   const summary = parts.join(", ");
 
+  const normalizedInitialCollabs = initialCollaborators.map(ensureAt);
+  const normalizedInitialTags = initialUserTags.map(ensureAt);
   const hasChanges =
-    JSON.stringify(parsedCollabs) !== JSON.stringify(initialCollaborators) ||
-    JSON.stringify(parsedTags) !== JSON.stringify(initialUserTags);
+    JSON.stringify(parsedCollabs) !== JSON.stringify(normalizedInitialCollabs) ||
+    JSON.stringify(parsedTags) !== JSON.stringify(normalizedInitialTags);
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -66,12 +131,45 @@ export function CollaborationSection({
       if (!res.ok) throw new Error("Failed to save collaboration settings");
     },
     onSuccess: () => {
-      setExpanded(false);
+      saveRecent(LS_COLLABS_KEY, parsedCollabs);
+      saveRecent(LS_TAGS_KEY, parsedTags);
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
-      toast.success("Collaboration settings saved");
+      toast.success("Collaboration saved");
     },
     onError: () => toast.error("Failed to save collaboration settings"),
   });
+
+  // Auto-save: debounced on blur, immediate on collapse or chip click
+  const triggerSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    // Re-parse at call time to get latest values
+    saveMutation.mutate();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId]);
+
+  const handleBlur = useCallback(() => {
+    // Short delay so chip clicks register before blur fires
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      // Re-check hasChanges at save time (captured via closure won't work, so just always save — the mutation is idempotent)
+      saveMutation.mutate();
+    }, 500);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [postId]);
+
+  const handleRemoveChip = (key: string, handle: string) => {
+    removeRecent(key, handle);
+    setChipVersion((v) => v + 1);
+  };
+
+  const handleChipAdd = (setter: (v: string) => void, currentInput: string, handle: string) => {
+    setter(appendHandle(currentInput, handle));
+    // Save after a short delay to let state update
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => {
+      saveMutation.mutate();
+    }, 300);
+  };
 
   return (
     <div className="border-t border-border">
@@ -79,11 +177,9 @@ export function CollaborationSection({
         onClick={() => {
           const opening = !expanded;
           setExpanded(opening);
-          if (!opening) {
-            // Collapsing — reset inputs to saved values
-            setCollabInput(initialCollaborators.join(", "));
-            setTagsInput(initialUserTags.join(", "));
-          } else {
+          if (!opening && hasChanges && !isPublished && parsedCollabs.length <= 3) {
+            triggerSave();
+          } else if (opening) {
             requestAnimationFrame(() => {
               contentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
             });
@@ -103,10 +199,10 @@ export function CollaborationSection({
           {isPublished ? (
             <div className="text-xs leading-relaxed text-muted-foreground">
               {initialCollaborators.length > 0 && (
-                <div>Collaborators: {initialCollaborators.join(", ")}</div>
+                <div>Collaborators: {initialCollaborators.map(ensureAt).join(", ")}</div>
               )}
               {initialUserTags.length > 0 && (
-                <div>Image tags: {initialUserTags.join(", ")}</div>
+                <div>Image tags: {initialUserTags.map(ensureAt).join(", ")}</div>
               )}
               {initialCollaborators.length === 0 && initialUserTags.length === 0 && (
                 <span className="italic">None</span>
@@ -119,11 +215,34 @@ export function CollaborationSection({
                 <input
                   value={collabInput}
                   onChange={(e) => setCollabInput(e.target.value)}
+                  onBlur={handleBlur}
                   placeholder="@username1, @username2 (comma-separated)"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
                 />
                 {collabError && (
                   <p className="text-[10px] text-destructive">{collabError}</p>
+                )}
+                {availableCollabs.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {availableCollabs.map((h) => (
+                      <span key={h} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground transition-colors">
+                        <span
+                          className="hover:text-foreground cursor-pointer"
+                          onClick={() => handleChipAdd(setCollabInput, collabInput, h)}
+                        >
+                          + {h}
+                        </span>
+                        <button
+                          type="button"
+                          className="hover:text-destructive ml-0.5"
+                          onClick={() => handleRemoveChip(LS_COLLABS_KEY, h)}
+                          title="Remove from suggestions"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
                 )}
               </div>
               <div className="space-y-1">
@@ -131,21 +250,33 @@ export function CollaborationSection({
                 <input
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="@artistname, @galleryname"
+                  onBlur={handleBlur}
+                  placeholder="@artistname, @galleryname (comma-separated)"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
                 />
+                {availableTags.length > 0 && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {availableTags.map((h) => (
+                      <span key={h} className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground transition-colors">
+                        <span
+                          className="hover:text-foreground cursor-pointer"
+                          onClick={() => handleChipAdd(setTagsInput, tagsInput, h)}
+                        >
+                          + {h}
+                        </span>
+                        <button
+                          type="button"
+                          className="hover:text-destructive ml-0.5"
+                          onClick={() => handleRemoveChip(LS_TAGS_KEY, h)}
+                          title="Remove from suggestions"
+                        >
+                          <X className="h-2.5 w-2.5" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
-              {hasChanges && (
-                <Button
-                  size="sm"
-                  className="h-6 text-xs"
-                  disabled={!!collabError || saveMutation.isPending}
-                  onClick={() => saveMutation.mutate()}
-                >
-                  <Save className="h-3 w-3 mr-1" />
-                  {saveMutation.isPending ? "Saving..." : "Save"}
-                </Button>
-              )}
             </div>
           )}
         </div>
