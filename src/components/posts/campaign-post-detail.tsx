@@ -37,6 +37,7 @@ import { CampaignImageLibrary } from "./campaign-image-library";
 import { RegenerateDialog } from "./regenerate-dialog";
 import { FlagIssueDialog } from "./flag-issue-dialog";
 import { CoverSlideDesigner } from "./cover-slide-designer";
+import { CollaborationSection } from "./collaboration-section";
 import { PlatformBadge } from "@/components/shared/platform-icon";
 import { getEligibleOutpaintIndices } from "@/lib/media-items";
 import type { Campaign, Post } from "@/lib/airtable/types";
@@ -149,6 +150,17 @@ export function CampaignPostDetail({
     },
     onError: () => toast.error("Failed to save first comment"),
   });
+
+  // ── Collaboration (Instagram only) ────────────────────────────────────
+  const isInstagram = platformLower === "instagram";
+  const collaborators: string[] = (() => {
+    try { return post.collaborators ? JSON.parse(post.collaborators) : []; }
+    catch { return []; }
+  })();
+  const userTags: string[] = (() => {
+    try { return post.userTags ? JSON.parse(post.userTags) : []; }
+    catch { return []; }
+  })();
 
   // Reset state when navigating between posts
   const [prevPostId, setPrevPostId] = useState(post.id);
@@ -418,6 +430,16 @@ export function CampaignPostDetail({
             saveDisabled={content.editedContent === post.content}
           />
         </div>
+
+        {/* Instagram collaboration — collaborators & image tags */}
+        {isInstagram && (
+          <CollaborationSection
+            postId={post.id}
+            collaborators={collaborators}
+            userTags={userTags}
+            isPublished={isPublished}
+          />
+        )}
 
         {/* Source link row — right-aligned, paired with char count row above */}
         <div className="px-6 pb-2 flex items-center text-xs text-muted-foreground">
