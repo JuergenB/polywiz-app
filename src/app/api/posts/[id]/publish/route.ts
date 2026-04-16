@@ -213,7 +213,8 @@ export async function POST(
         const collabs: string[] = post.fields.Collaborators
           ? JSON.parse(post.fields.Collaborators)
           : [];
-        if (collabs.length > 0) psd.collaborators = collabs;
+        const cleaned = collabs.map((u) => u.replace(/^@/, ""));
+        if (cleaned.length > 0) psd.collaborators = cleaned;
       } catch { /* ignore malformed JSON */ }
 
       try {
@@ -221,7 +222,7 @@ export async function POST(
           ? JSON.parse(post.fields["User Tags"])
           : [];
         if (tags.length > 0) {
-          psd.userTags = tags.map((username) => ({ username, x: 0.5, y: 0.5 }));
+          psd.userTags = tags.map((u) => ({ username: u.replace(/^@/, ""), x: 0.5, y: 0.5 }));
         }
       } catch { /* ignore malformed JSON */ }
     }

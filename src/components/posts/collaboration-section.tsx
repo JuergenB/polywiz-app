@@ -13,16 +13,11 @@ interface CollaborationSectionProps {
   isPublished: boolean;
 }
 
-/** Strip @ prefix and whitespace from a username. */
-function cleanUsername(raw: string): string {
-  return raw.trim().replace(/^@/, "");
-}
-
-/** Parse comma-separated usernames, strip @, filter empties. */
+/** Parse comma-separated usernames, trim whitespace, filter empties. Preserves @ prefix. */
 function parseUsernames(input: string): string[] {
   return input
     .split(",")
-    .map(cleanUsername)
+    .map((u) => u.trim())
     .filter((u) => u.length > 0);
 }
 
@@ -108,10 +103,10 @@ export function CollaborationSection({
           {isPublished ? (
             <div className="text-xs leading-relaxed text-muted-foreground">
               {initialCollaborators.length > 0 && (
-                <div>Collaborators: {initialCollaborators.map(u => `@${u}`).join(", ")}</div>
+                <div>Collaborators: {initialCollaborators.join(", ")}</div>
               )}
               {initialUserTags.length > 0 && (
-                <div>Image tags: {initialUserTags.map(u => `@${u}`).join(", ")}</div>
+                <div>Image tags: {initialUserTags.join(", ")}</div>
               )}
               {initialCollaborators.length === 0 && initialUserTags.length === 0 && (
                 <span className="italic">None</span>
@@ -124,7 +119,7 @@ export function CollaborationSection({
                 <input
                   value={collabInput}
                   onChange={(e) => setCollabInput(e.target.value)}
-                  placeholder="username1, username2"
+                  placeholder="@username1, @username2"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
                 />
                 {collabError && (
@@ -136,7 +131,7 @@ export function CollaborationSection({
                 <input
                   value={tagsInput}
                   onChange={(e) => setTagsInput(e.target.value)}
-                  placeholder="artistname, galleryname"
+                  placeholder="@artistname, @galleryname"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
                 />
               </div>
