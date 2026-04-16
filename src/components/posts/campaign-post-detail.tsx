@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useRef, useState, useMemo } from "react";
 import { useQueryClient, useMutation } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { format } from "date-fns/format";
@@ -84,6 +84,7 @@ export function CampaignPostDetail({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [lightboxIndex, setLightboxIndex] = useState(0);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
+  const firstCommentContentRef = useRef<HTMLDivElement>(null);
   const [showAddImage, setShowAddImage] = useState(false);
   const [showOutpaintSelector, setShowOutpaintSelector] = useState(false);
 
@@ -431,16 +432,6 @@ export function CampaignPostDetail({
           />
         </div>
 
-        {/* Instagram collaboration — collaborators & image tags */}
-        {isInstagram && (
-          <CollaborationSection
-            postId={post.id}
-            collaborators={collaborators}
-            userTags={userTags}
-            isPublished={isPublished}
-          />
-        )}
-
         {/* Source link row — right-aligned, paired with char count row above */}
         <div className="px-6 pb-2 flex items-center text-xs text-muted-foreground">
           {post.notes && (
@@ -477,13 +468,30 @@ export function CampaignPostDetail({
           </div>
         )}
 
+        {/* Instagram collaboration — collaborators & image tags */}
+        {isInstagram && (
+          <CollaborationSection
+            postId={post.id}
+            collaborators={collaborators}
+            userTags={userTags}
+            isPublished={isPublished}
+          />
+        )}
+
         {/* First Comment / Hashtags — own section with separator */}
         {showFirstComment && post.firstComment && (() => {
           const hashtagCount = (post.firstComment.match(/#\w+/g) || []).length;
           return (
             <div className="border-t border-border">
               <button
-                onClick={() => setFirstCommentExpanded(!firstCommentExpanded)}
+                onClick={() => {
+                  setFirstCommentExpanded(!firstCommentExpanded);
+                  if (!firstCommentExpanded) {
+                    requestAnimationFrame(() => {
+                      firstCommentContentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+                    });
+                  }
+                }}
                 className="flex items-center gap-1.5 w-full px-6 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <MessageSquare className="h-3 w-3" />
@@ -494,7 +502,7 @@ export function CampaignPostDetail({
                 {firstCommentExpanded ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
               </button>
               {firstCommentExpanded && (
-                <div className="px-6 pb-3">
+                <div ref={firstCommentContentRef} className="px-6 pb-3">
                   {editingFirstComment && !isPublished ? (
                     <div className="space-y-2">
                       <textarea

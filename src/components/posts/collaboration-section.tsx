@@ -1,10 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ChevronDown, ChevronUp, Save, Users } from "lucide-react";
 
 interface CollaborationSectionProps {
@@ -34,9 +33,17 @@ export function CollaborationSection({
   isPublished,
 }: CollaborationSectionProps) {
   const queryClient = useQueryClient();
+  const contentRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [collabInput, setCollabInput] = useState(initialCollaborators.join(", "));
   const [tagsInput, setTagsInput] = useState(initialUserTags.join(", "));
+  const [editing, setEditing] = useState(false);
+
+  const scrollIntoView = () => {
+    requestAnimationFrame(() => {
+      contentRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    });
+  };
 
   const parsedCollabs = parseUsernames(collabInput);
   const parsedTags = parseUsernames(tagsInput);
@@ -69,6 +76,7 @@ export function CollaborationSection({
       if (!res.ok) throw new Error("Failed to save collaboration settings");
     },
     onSuccess: () => {
+      setEditing(false);
       queryClient.invalidateQueries({ queryKey: ["campaign"] });
       toast.success("Collaboration settings saved");
     },
@@ -76,68 +84,86 @@ export function CollaborationSection({
   });
 
   return (
-    <div className="px-6 pb-3">
+    <div className="border-t border-border">
       <button
-        type="button"
-        className="flex items-center gap-2 w-full text-left text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
-        onClick={() => setExpanded(!expanded)}
+        onClick={() => { setExpanded(!expanded); if (!expanded) scrollIntoView(); }}
+        className="flex items-center gap-1.5 w-full px-6 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
-        {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
-        <Users className="h-3.5 w-3.5" />
-        Collaboration
-        {summary && !expanded && (
-          <span className="ml-auto text-xs text-muted-foreground font-normal">{summary}</span>
+        <Users className="h-3 w-3" />
+        <span>Collaboration</span>
+        {summary && (
+          <span className="text-[10px] text-muted-foreground/60">({summary})</span>
         )}
+        {expanded ? <ChevronUp className="h-3 w-3 ml-auto" /> : <ChevronDown className="h-3 w-3 ml-auto" />}
       </button>
-
       {expanded && (
-        <div className="mt-3 space-y-4 pl-6">
-          {/* Collaborators */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">
-              Collaborators <span className="text-muted-foreground font-normal">(max 3)</span>
-            </label>
-            <Input
-              value={collabInput}
-              onChange={(e) => setCollabInput(e.target.value)}
-              placeholder="username1, username2"
-              disabled={isPublished}
-              className="text-sm h-8"
-            />
-            {collabError && (
-              <p className="text-xs text-destructive">{collabError}</p>
-            )}
-            <p className="text-[11px] text-muted-foreground">
-              Invite these accounts as collaborators — they&apos;ll be asked to co-publish this post.
-            </p>
-          </div>
-
-          {/* User Tags */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-foreground">Image Tags</label>
-            <Input
-              value={tagsInput}
-              onChange={(e) => setTagsInput(e.target.value)}
-              placeholder="artistname, galleryname"
-              disabled={isPublished}
-              className="text-sm h-8"
-            />
-            <p className="text-[11px] text-muted-foreground">
-              Tag these accounts on the image — the post appears on their Tagged tab.
-            </p>
-          </div>
-
-          {/* Save */}
-          {!isPublished && (
-            <Button
-              size="sm"
-              className="h-7 text-xs"
-              disabled={!hasChanges || !!collabError || saveMutation.isPending}
-              onClick={() => saveMutation.mutate()}
+        <div ref={contentRef} className="px-6 pb-3">
+          {editing && !isPublished ? (
+            <div className="space-y-3">
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground">Collaborators (max 3)</label>
+                <input
+                  value={collabInput}
+                  onChange={(e) => setCollabInput(e.target.value)}
+                  placeholder="username1, username2"
+                  className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
+                />
+                {collabError && (
+                  <p className="text-[10px] text-destructive">{collabError}</p>
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-[10px] text-muted-foreground">Image Tags</label>
+                <input
+                  value={tagsInput}
+                  onChange={(e) => setTagsInput(e.target.value)}
+                  placeholder="artistname, galleryname"
+                  className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  className="h-6 text-xs"
+                  disabled={!hasChanges || !!collabError || saveMutation.isPending}
+                  onClick={() => saveMutation.mutate()}
+                >
+                  <Save className="h-3 w-3 mr-1" />
+                  {saveMutation.isPending ? "Saving..." : "Save"}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-6 text-xs"
+                  onClick={() => {
+                    setEditing(false);
+                    setCollabInput(initialCollaborators.join(", "));
+                    setTagsInput(initialUserTags.join(", "));
+                  }}
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <div
+              className={`text-xs leading-relaxed text-muted-foreground${!isPublished ? " cursor-pointer hover:text-foreground" : ""}`}
+              onClick={() => { if (!isPublished) { setEditing(true); scrollIntoView(); } }}
+              title={isPublished ? undefined : "Click to edit"}
             >
-              <Save className="h-3 w-3 mr-1" />
-              {saveMutation.isPending ? "Saving..." : "Save"}
-            </Button>
+              {initialCollaborators.length > 0 || initialUserTags.length > 0 ? (
+                <div className="space-y-1">
+                  {initialCollaborators.length > 0 && (
+                    <div>Collaborators: {initialCollaborators.map(u => `@${u}`).join(", ")}</div>
+                  )}
+                  {initialUserTags.length > 0 && (
+                    <div>Image tags: {initialUserTags.map(u => `@${u}`).join(", ")}</div>
+                  )}
+                </div>
+              ) : (
+                <span className="italic">Click to add collaborators or image tags</span>
+              )}
+            </div>
           )}
         </div>
       )}
