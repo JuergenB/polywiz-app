@@ -49,13 +49,15 @@ export function CollaborationSection({
   const parsedTags = parseUsernames(tagsInput);
   const collabError = parsedCollabs.length > 3 ? "Maximum 3 collaborators allowed" : null;
 
-  // Summary for collapsed state
+  // Summary for header — use saved (initial) values, or current input if editing
+  const displayCollabs = editing ? parsedCollabs : initialCollaborators;
+  const displayTags = editing ? parsedTags : initialUserTags;
   const parts: string[] = [];
-  if (initialCollaborators.length > 0) {
-    parts.push(`${initialCollaborators.length} collaborator${initialCollaborators.length > 1 ? "s" : ""}`);
+  if (displayCollabs.length > 0) {
+    parts.push(`${displayCollabs.length} collaborator${displayCollabs.length > 1 ? "s" : ""}`);
   }
-  if (initialUserTags.length > 0) {
-    parts.push(`${initialUserTags.length} tag${initialUserTags.length > 1 ? "s" : ""}`);
+  if (displayTags.length > 0) {
+    parts.push(`${displayTags.length} tag${displayTags.length > 1 ? "s" : ""}`);
   }
   const summary = parts.join(", ");
 
