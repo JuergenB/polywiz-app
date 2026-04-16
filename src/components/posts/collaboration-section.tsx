@@ -119,7 +119,7 @@ export function CollaborationSection({
                 <input
                   value={collabInput}
                   onChange={(e) => setCollabInput(e.target.value)}
-                  placeholder="@username1, @username2"
+                  placeholder="@username1, @username2 (comma-separated)"
                   className="w-full text-xs leading-relaxed bg-background border rounded-md p-2"
                 />
                 {collabError && (
