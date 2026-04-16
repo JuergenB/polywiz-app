@@ -86,7 +86,15 @@ export function CollaborationSection({
   return (
     <div className="border-t border-border">
       <button
-        onClick={() => { setExpanded(!expanded); if (!expanded) scrollIntoView(); }}
+        onClick={() => {
+          const opening = !expanded;
+          setExpanded(opening);
+          // When empty and not published, go straight to edit mode — no intermediate "click to add" step
+          if (opening && !isPublished && initialCollaborators.length === 0 && initialUserTags.length === 0) {
+            setEditing(true);
+          }
+          if (opening) scrollIntoView();
+        }}
         className="flex items-center gap-1.5 w-full px-6 py-2.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
       >
         <Users className="h-3 w-3" />
@@ -139,6 +147,10 @@ export function CollaborationSection({
                     setEditing(false);
                     setCollabInput(initialCollaborators.join(", "));
                     setTagsInput(initialUserTags.join(", "));
+                    // If nothing was saved, collapse entirely — don't show empty read-only state
+                    if (initialCollaborators.length === 0 && initialUserTags.length === 0) {
+                      setExpanded(false);
+                    }
                   }}
                 >
                   Cancel
