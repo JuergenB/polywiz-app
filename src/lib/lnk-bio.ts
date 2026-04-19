@@ -1,40 +1,77 @@
 /**
- * lnk.bio API client — link-in-bio management for Instagram posts
+ * lnk.bio API client — link-in-bio management for Instagram posts.
  *
- * Currently hardcoded for The Intersect brand (group_id: 68052).
- * Will be parameterized per-brand in issue #52.
+ * Per-brand config pattern (same as Short.io / Anthropic):
+ *   - Brand.lnkBioEnabled → feature flag
+ *   - Brand.lnkBioGroupId → target group for this brand's posts
+ *   - Brand.lnkBioClientIdLabel → env var name for OAuth client ID
+ *   - Brand.lnkBioClientSecretLabel → env var name for base64-encoded secret
+ *   - Falls back to LNKBIO_CLIENT_ID / LNKBIO_CLIENT_SECRET_B64 when labels absent
  *
- * API: https://lnk.bio/oauth/v1
- * Auth: OAuth2 client_credentials grant (auto-refreshing Bearer token)
- * Content-Type: application/x-www-form-urlencoded
+ * API docs (unofficial — captured from live probing):
+ *   POST /oauth/token                          — OAuth2 client_credentials
+ *   POST /oauth/v1/lnk/add                     — create entry (form-encoded)
+ *   POST /oauth/v1/lnk/edit                    — update entry (form-encoded, accepts group_id for moves)
+ *   POST /oauth/v1/lnk/delete                  — delete by link_id
+ *   GET  /oauth/v1/lnk/list[?group_id=X]       — list entries on authenticated profile
+ *   GET  /oauth/v1/group/list                  — list groups on authenticated profile
  */
 
 const API_BASE = "https://lnk.bio/oauth/v1";
 const TOKEN_URL = "https://lnk.bio/oauth/token";
-const INTERSECT_GROUP_ID = "68052";
 
-// In-memory token cache (refreshed when expired)
-let cachedToken: { accessToken: string; expiresAt: number } | null = null;
-
-function getCredentials(): { clientId: string; clientSecret: string } {
-  const clientId = process.env.LNKBIO_CLIENT_ID;
-  const secretB64 = process.env.LNKBIO_CLIENT_SECRET_B64;
-  if (!clientId || !secretB64) {
-    throw new Error("LNKBIO_CLIENT_ID and LNKBIO_CLIENT_SECRET_B64 must be set");
-  }
-  const clientSecret = Buffer.from(secretB64, "base64").toString("utf-8");
-  return { clientId, clientSecret };
+export interface LnkBioCredentials {
+  clientId: string;
+  clientSecret: string;
 }
 
-async function getAccessToken(): Promise<string> {
-  // Return cached token if still valid (with 60s buffer)
-  if (cachedToken && Date.now() < cachedToken.expiresAt - 60_000) {
-    return cachedToken.accessToken;
-  }
+export interface LnkBioConfig extends LnkBioCredentials {
+  /** Target group_id for new entries created by this brand. */
+  groupId: string;
+}
 
-  const { clientId, clientSecret } = getCredentials();
-  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString("base64");
+export interface BrandLnkBioFields {
+  lnkBioEnabled?: boolean;
+  lnkBioGroupId?: string | null;
+  lnkBioClientIdLabel?: string | null;
+  lnkBioClientSecretLabel?: string | null;
+}
 
+/**
+ * Resolve credentials only (no group). Used by delete paths where we don't need a target group.
+ * Returns null if the brand isn't configured for lnk.bio.
+ */
+export function resolveCredentials(brand: BrandLnkBioFields): LnkBioCredentials | null {
+  if (!brand.lnkBioEnabled) return null;
+  const clientId = brand.lnkBioClientIdLabel
+    ? process.env[brand.lnkBioClientIdLabel] || process.env.LNKBIO_CLIENT_ID
+    : process.env.LNKBIO_CLIENT_ID;
+  const secretB64 = brand.lnkBioClientSecretLabel
+    ? process.env[brand.lnkBioClientSecretLabel] || process.env.LNKBIO_CLIENT_SECRET_B64
+    : process.env.LNKBIO_CLIENT_SECRET_B64;
+  if (!clientId || !secretB64) return null;
+  return { clientId, clientSecret: Buffer.from(secretB64, "base64").toString("utf-8") };
+}
+
+/**
+ * Resolve full config (credentials + groupId). Used by create paths.
+ * Returns null if the brand isn't fully configured.
+ */
+export function resolveConfig(brand: BrandLnkBioFields): LnkBioConfig | null {
+  const creds = resolveCredentials(brand);
+  if (!creds) return null;
+  if (!brand.lnkBioGroupId) return null;
+  return { ...creds, groupId: brand.lnkBioGroupId };
+}
+
+// ── Token cache (keyed by clientId so per-brand refreshes don't collide) ────
+const tokenCache = new Map<string, { accessToken: string; expiresAt: number }>();
+
+async function getAccessToken(creds: LnkBioCredentials): Promise<string> {
+  const cached = tokenCache.get(creds.clientId);
+  if (cached && Date.now() < cached.expiresAt - 60_000) return cached.accessToken;
+
+  const basicAuth = Buffer.from(`${creds.clientId}:${creds.clientSecret}`).toString("base64");
   const res = await fetch(TOKEN_URL, {
     method: "POST",
     headers: {
@@ -50,42 +87,34 @@ async function getAccessToken(): Promise<string> {
   }
 
   const data = await res.json();
-  cachedToken = {
+  tokenCache.set(creds.clientId, {
     accessToken: data.access_token,
     expiresAt: Date.now() + (data.expires_in || 3600) * 1000,
-  };
-
-  return cachedToken.accessToken;
+  });
+  return data.access_token;
 }
 
 async function lnkBioRequest(
+  creds: LnkBioCredentials,
   path: string,
   method: "GET" | "POST",
   data?: Record<string, string>
 ): Promise<Record<string, unknown>> {
-  const token = await getAccessToken();
-
+  const token = await getAccessToken(creds);
   const options: RequestInit = {
     method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-    },
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
   };
-
   if (data && method === "POST") {
     (options.headers as Record<string, string>)["Content-Type"] =
       "application/x-www-form-urlencoded";
     options.body = new URLSearchParams(data).toString();
   }
-
   const res = await fetch(`${API_BASE}${path}`, options);
-
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`lnk.bio API ${res.status}: ${text}`);
   }
-
   return res.json();
 }
 
@@ -94,50 +123,47 @@ export interface CreateLnkBioEntryOptions {
   link: string;
   image?: string;
   scheduledDate?: string;
-  groupId?: string;
 }
 
 /**
- * Create a lnk.bio entry (link-in-bio item).
- * Returns the entry ID for later cleanup.
+ * Create a lnk.bio entry. Returns the entry ID (for later cleanup) or null on malformed response.
  */
 export async function createLnkBioEntry(
+  config: LnkBioConfig,
   options: CreateLnkBioEntryOptions
 ): Promise<string | null> {
   const params: Record<string, string> = {
     title: options.title,
     link: options.link,
-    group_id: options.groupId || INTERSECT_GROUP_ID,
+    group_id: config.groupId,
   };
-
-  if (options.image) {
-    params.image = options.image;
-  }
-
+  if (options.image) params.image = options.image;
   if (options.scheduledDate) {
-    // lnk.bio requires strict RFC 3339 without milliseconds: YYYY-MM-DDTHH:MM:SS±HH:MM
     const d = new Date(options.scheduledDate);
     const pad = (n: number) => String(n).padStart(2, "0");
     params.schedule_from =
       `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}-04:00`;
   }
 
-  const result = await lnkBioRequest("/lnk/add", "POST", params);
+  const result = await lnkBioRequest(config, "/lnk/add", "POST", params);
   console.log("[lnk-bio] Entry created:", JSON.stringify(result));
 
-  // Extract entry ID from response — actual shape: { data: { id: 12855662 } }
   const responseData = result.data as Record<string, unknown> | undefined;
   const entryId = responseData?.id || (result.info as Record<string, unknown>)?.lnk_id;
   return entryId ? String(entryId) : null;
 }
 
 /**
- * Delete a lnk.bio entry by ID.
+ * Delete a lnk.bio entry by ID. Silently succeeds if it doesn't exist.
+ * Logs but does not throw — callers treat this as best-effort cleanup.
  */
-export async function deleteLnkBioEntry(entryId: string): Promise<boolean> {
+export async function deleteLnkBioEntry(
+  creds: LnkBioCredentials,
+  entryId: string
+): Promise<boolean> {
   if (!entryId) return false;
   try {
-    await lnkBioRequest("/lnk/delete", "POST", { link_id: entryId });
+    await lnkBioRequest(creds, "/lnk/delete", "POST", { link_id: entryId });
     return true;
   } catch (err) {
     console.warn(`[lnk-bio] Failed to delete entry ${entryId}:`, err);
@@ -146,8 +172,19 @@ export async function deleteLnkBioEntry(entryId: string): Promise<boolean> {
 }
 
 /**
- * List all groups (useful for finding group IDs).
+ * List all groups for the authenticated profile.
+ * Useful for admin tools / configuration UIs.
  */
-export async function listGroups(): Promise<Record<string, unknown>> {
-  return lnkBioRequest("/group/list", "GET");
+export async function listGroups(creds: LnkBioCredentials): Promise<Record<string, unknown>> {
+  return lnkBioRequest(creds, "/group/list", "GET");
+}
+
+/**
+ * Build the public profile URL for a brand's lnk.bio page.
+ * Returns null if no username configured.
+ */
+export function buildProfileUrl(username?: string | null): string | null {
+  if (!username) return null;
+  const clean = username.replace(/^@/, "").replace(/^https?:\/\/(www\.)?lnk\.bio\//i, "").replace(/\/$/, "");
+  return clean ? `https://lnk.bio/${clean}` : null;
 }

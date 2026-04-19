@@ -39,6 +39,11 @@ interface BrandFields {
   "Zernio API Key Label": string;
   "Zernio Profile ID": string;
   Timezone?: string;
+  "Platform Cadence"?: string;
+  "Lnk.Bio Enabled"?: boolean;
+  "Lnk.Bio Group ID"?: string;
+  "Lnk.Bio Client ID Label"?: string;
+  "Lnk.Bio Client Secret Label"?: string;
 }
 
 /** Map Airtable platform names to Zernio platform IDs */
@@ -366,24 +371,31 @@ export async function POST(
           Status: zernioPostId ? "Scheduled" : "Approved", // Don't mark Scheduled without an ID
         };
 
-        // lnk.bio integration for Instagram (The Intersect only — per-brand config in #68)
-        const INTERSECT_BRAND_ID = "recQ69SHPps9W5z0U";
-        if (platform === "instagram" && post.fields["Short URL"] && brandId === INTERSECT_BRAND_ID) {
-          try {
-            const { createLnkBioEntry } = await import("@/lib/lnk-bio");
-            const entryId = await createLnkBioEntry({
-              title: (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
-              link: post.fields["Short URL"],
-              image: imageUrls[0] || "",
-              scheduledDate,
-            });
-            if (entryId) {
-              airtableUpdates["Lnk.Bio Entry ID"] = entryId;
+        // lnk.bio integration — Instagram only, gated on per-brand config
+        if (platform === "instagram" && post.fields["Short URL"]) {
+          const { createLnkBioEntry, resolveConfig } = await import("@/lib/lnk-bio");
+          const lnkConfig = resolveConfig({
+            lnkBioEnabled: brandRecord.fields["Lnk.Bio Enabled"],
+            lnkBioGroupId: brandRecord.fields["Lnk.Bio Group ID"] || null,
+            lnkBioClientIdLabel: brandRecord.fields["Lnk.Bio Client ID Label"] || null,
+            lnkBioClientSecretLabel: brandRecord.fields["Lnk.Bio Client Secret Label"] || null,
+          });
+          if (lnkConfig) {
+            try {
+              const entryId = await createLnkBioEntry(lnkConfig, {
+                title: (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
+                link: post.fields["Short URL"],
+                image: imageUrls[0] || "",
+                scheduledDate,
+              });
+              if (entryId) {
+                airtableUpdates["Lnk.Bio Entry ID"] = entryId;
+              }
+              console.log(`[schedule] lnk.bio entry created for ${post.id}: ${entryId}`);
+            } catch (err) {
+              // Non-blocking — post scheduling succeeds even if lnk.bio fails
+              console.warn(`[schedule] lnk.bio creation failed for ${post.id}:`, err);
             }
-            console.log(`[schedule] lnk.bio entry created for ${post.id}: ${entryId}`);
-          } catch (err) {
-            // Non-blocking — post scheduling succeeds even if lnk.bio fails
-            console.warn(`[schedule] lnk.bio creation failed for ${post.id}:`, err);
           }
         }
 

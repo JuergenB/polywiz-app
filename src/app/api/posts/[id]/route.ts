@@ -146,6 +146,94 @@ export async function PATCH(
 
     await updateRecord("Posts", id, fields);
 
+    // Status changes that should tear down a scheduled lnk.bio entry
+    const statusChangedAwayFromScheduled =
+      body.status !== undefined && body.status !== "Scheduled" && body.status !== "Published";
+
+    // Reschedule / edit that should delete-then-recreate the lnk.bio entry
+    const lnkBioShouldRecreate =
+      body.scheduledDate !== undefined
+      || body.content !== undefined
+      || body.imageUrl !== undefined;
+
+    if (statusChangedAwayFromScheduled || lnkBioShouldRecreate) {
+      (async () => {
+        try {
+          const post = await getRecord<{
+            "Lnk.Bio Entry ID": string;
+            "Short URL": string;
+            "Image URL": string;
+            "Scheduled Date": string;
+            Content: string;
+            Platform: string;
+            Campaign: string[];
+          }>("Posts", id);
+
+          const entryId = post.fields["Lnk.Bio Entry ID"];
+          if (!entryId) return;
+
+          const campaignId = post.fields.Campaign?.[0];
+          if (!campaignId) return;
+          const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
+          const brandId = campaign.fields.Brand?.[0];
+          if (!brandId) return;
+          const brand = await getRecord<{
+            "Lnk.Bio Enabled": boolean;
+            "Lnk.Bio Group ID": string;
+            "Lnk.Bio Client ID Label": string;
+            "Lnk.Bio Client Secret Label": string;
+          }>("Brands", brandId);
+
+          const { deleteLnkBioEntry, createLnkBioEntry, resolveCredentials, resolveConfig } =
+            await import("@/lib/lnk-bio");
+
+          const creds = resolveCredentials({
+            lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
+            lnkBioClientIdLabel: brand.fields["Lnk.Bio Client ID Label"] || null,
+            lnkBioClientSecretLabel: brand.fields["Lnk.Bio Client Secret Label"] || null,
+          });
+          if (!creds) return;
+
+          await deleteLnkBioEntry(creds, entryId);
+
+          const isInstagram = post.fields.Platform === "Instagram";
+          if (statusChangedAwayFromScheduled || !isInstagram) {
+            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
+            return;
+          }
+
+          // Recreate with latest values
+          const cfg = resolveConfig({
+            lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
+            lnkBioGroupId: brand.fields["Lnk.Bio Group ID"] || null,
+            lnkBioClientIdLabel: brand.fields["Lnk.Bio Client ID Label"] || null,
+            lnkBioClientSecretLabel: brand.fields["Lnk.Bio Client Secret Label"] || null,
+          });
+          const shortUrl = post.fields["Short URL"];
+          if (!cfg || !shortUrl) {
+            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
+            return;
+          }
+
+          try {
+            const newId = await createLnkBioEntry(cfg, {
+              title:
+                (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
+              link: shortUrl,
+              image: post.fields["Image URL"] || "",
+              scheduledDate: post.fields["Scheduled Date"],
+            });
+            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": newId || "" });
+          } catch (err) {
+            console.warn("[posts] lnk.bio recreate failed:", err);
+            await updateRecord("Posts", id, { "Lnk.Bio Entry ID": "" });
+          }
+        } catch (err) {
+          console.warn("[posts] lnk.bio sync error:", err);
+        }
+      })();
+    }
+
     // Sync content/media/firstComment changes to Zernio if the post is already scheduled
     const contentOrMediaChanged = fields["Content"] !== undefined
       || fields["Image URL"] !== undefined
@@ -285,6 +373,8 @@ export async function DELETE(
       "Image URL": string;
       "Media URLs": string;
       "Short URL": string;
+      "Lnk.Bio Entry ID": string;
+      Campaign: string[];
     }>("Posts", id);
 
     // Clean up Vercel Blob images
@@ -306,6 +396,34 @@ export async function DELETE(
         await deleteShortLink(post.fields["Short URL"]);
       } catch (err) {
         console.warn(`[posts] Failed to delete short link on delete:`, err);
+      }
+    }
+
+    // Clean up lnk.bio entry (per-brand credentials)
+    const lnkBioEntryId = post.fields["Lnk.Bio Entry ID"];
+    if (lnkBioEntryId) {
+      try {
+        const campaignId = post.fields.Campaign?.[0];
+        if (campaignId) {
+          const campaign = await getRecord<{ Brand: string[] }>("Campaigns", campaignId);
+          const brandId = campaign.fields.Brand?.[0];
+          if (brandId) {
+            const brand = await getRecord<{
+              "Lnk.Bio Enabled": boolean;
+              "Lnk.Bio Client ID Label": string;
+              "Lnk.Bio Client Secret Label": string;
+            }>("Brands", brandId);
+            const { deleteLnkBioEntry, resolveCredentials } = await import("@/lib/lnk-bio");
+            const creds = resolveCredentials({
+              lnkBioEnabled: brand.fields["Lnk.Bio Enabled"],
+              lnkBioClientIdLabel: brand.fields["Lnk.Bio Client ID Label"] || null,
+              lnkBioClientSecretLabel: brand.fields["Lnk.Bio Client Secret Label"] || null,
+            });
+            if (creds) await deleteLnkBioEntry(creds, lnkBioEntryId);
+          }
+        }
+      } catch (err) {
+        console.warn(`[posts] Failed to delete lnk.bio entry on delete:`, err);
       }
     }
 

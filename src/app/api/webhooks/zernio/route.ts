@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { listRecords, getRecord, updateRecord } from "@/lib/airtable/client";
+import { deleteLnkBioEntry, resolveCredentials as resolveLnkBioCredentials } from "@/lib/lnk-bio";
 
 interface PostFields {
   "Zernio Post ID": string;
   Status: string;
   Campaign?: string[]; // linked record IDs
+  "Lnk.Bio Entry ID"?: string;
 }
 
 interface CampaignFields {
@@ -14,6 +16,9 @@ interface CampaignFields {
 
 interface BrandFields {
   Name?: string;
+  "Lnk.Bio Enabled"?: boolean;
+  "Lnk.Bio Client ID Label"?: string;
+  "Lnk.Bio Client Secret Label"?: string;
 }
 
 const WEBHOOK_SECRET = process.env.ZERNIO_WEBHOOK_SECRET;
@@ -89,7 +94,7 @@ export async function POST(request: NextRequest) {
     // Find the Airtable post by Zernio Post ID
     const posts = await listRecords<PostFields>("Posts", {
       filterByFormula: `{Zernio Post ID} = '${zernioPostId}'`,
-      fields: ["Zernio Post ID", "Status", "Campaign"],
+      fields: ["Zernio Post ID", "Status", "Campaign", "Lnk.Bio Entry ID"],
     });
 
     if (posts.length === 0) {
@@ -101,14 +106,15 @@ export async function POST(request: NextRequest) {
 
     // ── Brand verification ─────────────────────────────────────────────
     let brandName = "unknown";
+    let brandRecord: { fields: BrandFields } | null = null;
     const campaignIds = (airtablePost.fields as PostFields).Campaign;
     if (campaignIds && campaignIds.length > 0) {
       try {
         const campaign = await getRecord<CampaignFields>("Campaigns", campaignIds[0]);
         const brandIds = campaign.fields.Brand;
         if (brandIds && brandIds.length > 0) {
-          const brand = await getRecord<BrandFields>("Brands", brandIds[0]);
-          brandName = brand.fields.Name || brandIds[0];
+          brandRecord = await getRecord<BrandFields>("Brands", brandIds[0]);
+          brandName = brandRecord.fields.Name || brandIds[0];
         } else {
           console.warn(`[webhook] Campaign ${campaignIds[0]} has no brand linked`);
         }
@@ -145,6 +151,23 @@ export async function POST(request: NextRequest) {
           .join("; ");
         if (errors) {
           console.error(`[webhook] Post ${airtablePost.id} failed: ${errors}`);
+        }
+
+        const entryId = (airtablePost.fields as PostFields)["Lnk.Bio Entry ID"];
+        if (entryId && brandRecord) {
+          try {
+            const lnkBioCreds = resolveLnkBioCredentials({
+              lnkBioEnabled: brandRecord.fields["Lnk.Bio Enabled"],
+              lnkBioClientIdLabel: brandRecord.fields["Lnk.Bio Client ID Label"] || null,
+              lnkBioClientSecretLabel: brandRecord.fields["Lnk.Bio Client Secret Label"] || null,
+            });
+            if (lnkBioCreds) {
+              await deleteLnkBioEntry(lnkBioCreds, entryId);
+              updates["Lnk.Bio Entry ID"] = "";
+            }
+          } catch (err) {
+            console.warn(`[webhook] Failed to delete lnk.bio entry ${entryId}:`, err);
+          }
         }
         break;
       }

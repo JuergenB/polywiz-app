@@ -30,6 +30,10 @@ interface BrandFields {
   "Zernio API Key Label": string;
   "Zernio Profile ID": string;
   Timezone?: string;
+  "Lnk.Bio Enabled"?: boolean;
+  "Lnk.Bio Group ID"?: string;
+  "Lnk.Bio Client ID Label"?: string;
+  "Lnk.Bio Client Secret Label"?: string;
 }
 
 const PLATFORM_MAP: Record<string, string> = {
@@ -261,24 +265,31 @@ export async function POST(
       Status: "Scheduled",
     };
 
-    // lnk.bio integration for Instagram (The Intersect only — per-brand config in #68)
-    const INTERSECT_BRAND_ID = "recQ69SHPps9W5z0U";
-    if (platform === "instagram" && post.fields["Short URL"] && brandId === INTERSECT_BRAND_ID) {
-      try {
-        const { createLnkBioEntry } = await import("@/lib/lnk-bio");
-        const entryId = await createLnkBioEntry({
-          title: (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
-          link: post.fields["Short URL"],
-          image: post.fields["Image URL"] || "",
-          scheduledDate: publishAt,
-        });
-        if (entryId) {
-          airtableUpdates["Lnk.Bio Entry ID"] = entryId;
+    // lnk.bio integration — Instagram only, gated on per-brand config
+    if (platform === "instagram" && post.fields["Short URL"]) {
+      const { createLnkBioEntry, resolveConfig } = await import("@/lib/lnk-bio");
+      const lnkConfig = resolveConfig({
+        lnkBioEnabled: brandRecord.fields["Lnk.Bio Enabled"],
+        lnkBioGroupId: brandRecord.fields["Lnk.Bio Group ID"] || null,
+        lnkBioClientIdLabel: brandRecord.fields["Lnk.Bio Client ID Label"] || null,
+        lnkBioClientSecretLabel: brandRecord.fields["Lnk.Bio Client Secret Label"] || null,
+      });
+      if (lnkConfig) {
+        try {
+          const entryId = await createLnkBioEntry(lnkConfig, {
+            title: (post.fields.Content || "").split("\n")[0].slice(0, 100) || "Link",
+            link: post.fields["Short URL"],
+            image: post.fields["Image URL"] || "",
+            scheduledDate: publishAt,
+          });
+          if (entryId) {
+            airtableUpdates["Lnk.Bio Entry ID"] = entryId;
+          }
+          console.log(`[publish-now] lnk.bio entry created: ${entryId}`);
+        } catch (err) {
+          // Non-blocking — Instagram post succeeds even if lnk.bio fails
+          console.warn("[publish-now] lnk.bio creation failed:", err);
         }
-        console.log(`[publish-now] lnk.bio entry created: ${entryId}`);
-      } catch (err) {
-        // Non-blocking — Instagram post succeeds even if lnk.bio fails
-        console.warn("[publish-now] lnk.bio creation failed:", err);
       }
     }
 

@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import {
   Sheet,
   SheetContent,
@@ -37,12 +38,15 @@ import {
   SlidersHorizontal,
   Sparkles,
   Loader2,
+  Link2,
+  AlertTriangle,
 } from "lucide-react";
 import type { Brand, PlatformCadenceEntry, TimeWindow, ToneDimensions } from "@/lib/airtable/types";
 import { TONE_DIMENSION_DEFS } from "@/lib/airtable/types";
 import { Slider } from "@/components/ui/slider";
 import type { Platform } from "@/lib/late-api";
 import { useBrand } from "@/lib/brand-context";
+import { buildProfileUrl } from "@/lib/lnk-bio";
 import { cn } from "@/lib/utils";
 import { getToneLabel, getAllToneTiers } from "@/lib/prompts/tone-guidance";
 import { CadenceEditor } from "@/components/brands/cadence-editor";
@@ -478,6 +482,138 @@ function ToneDimensionsEditor({ brand }: { brand: Brand }) {
   );
 }
 
+// ── lnk.bio Settings ──────────────────────────────────────────────────
+
+function LnkBioSettings({ brand }: { brand: Brand }) {
+  const queryClient = useQueryClient();
+  const [enabled, setEnabled] = useState(!!brand.lnkBioEnabled);
+
+  // Reset local state when brand changes
+  const brandId = brand.id;
+  const [lastBrandId, setLastBrandId] = useState(brandId);
+  if (brandId !== lastBrandId) {
+    setEnabled(!!brand.lnkBioEnabled);
+    setLastBrandId(brandId);
+  }
+
+  const mutation = useMutation({
+    mutationFn: async (updates: Record<string, unknown>) => {
+      const res = await fetch("/api/brands", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: brand.id, ...updates }),
+      });
+      if (!res.ok) throw new Error("Failed to update brand");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["brands"] });
+      toast.success("lnk.bio settings saved");
+    },
+    onError: () => {
+      toast.error("Failed to save lnk.bio settings");
+      // Revert local state on error
+      setEnabled(!!brand.lnkBioEnabled);
+    },
+  });
+
+  const handleToggle = (next: boolean) => {
+    setEnabled(next);
+    mutation.mutate({ lnkBioEnabled: next });
+  };
+
+  const profileUrl = buildProfileUrl(brand.lnkBioUsername);
+
+  return (
+    <Card>
+      <CardContent className="p-5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Label
+              htmlFor={`lnkbio-enabled-${brand.id}`}
+              className="text-xs font-medium text-muted-foreground uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+            >
+              <Link2 className="h-3 w-3" />
+              lnk.bio
+            </Label>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">
+              {enabled ? "Enabled" : "Disabled"}
+            </span>
+            <Switch
+              id={`lnkbio-enabled-${brand.id}`}
+              checked={enabled}
+              onCheckedChange={handleToggle}
+              disabled={mutation.isPending}
+            />
+          </div>
+        </div>
+
+        {!enabled ? (
+          <p className="text-xs text-muted-foreground mt-3">
+            Automatically creates a link-in-bio entry on your lnk.bio profile
+            when Instagram posts are scheduled. Toggle on to configure.
+          </p>
+        ) : (
+          <div className="mt-4 space-y-4">
+            {/* Group ID — read-only */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">Group ID</Label>
+              {brand.lnkBioGroupId ? (
+                <div className="text-sm">
+                  <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
+                    {brand.lnkBioGroupId}
+                  </code>
+                </div>
+              ) : (
+                <div className="flex items-start gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <span>
+                    No group ID configured — lnk.bio entries will not be
+                    created. Contact an admin.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Profile link */}
+            <div className="space-y-1">
+              <Label className="text-xs text-muted-foreground">
+                Profile link
+              </Label>
+              {profileUrl ? (
+                <a
+                  href={profileUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  {profileUrl}
+                  <ExternalLink className="h-3 w-3" />
+                </a>
+              ) : (
+                <p className="text-sm text-muted-foreground italic">
+                  No username configured.
+                </p>
+              )}
+            </div>
+
+            {/* Explanation */}
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              Instagram-only. When an Instagram post is scheduled, a
+              link-in-bio entry is automatically created on your lnk.bio
+              profile. Scheduled posts appear with their future publish date.
+              If a post is cancelled, deleted, or rescheduled, its lnk.bio
+              entry is updated automatically.
+            </p>
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ── Brand Settings (single brand) ─────────────────────────────────────
 
 function BrandSettings({ brand }: { brand: Brand }) {
@@ -746,6 +882,9 @@ function BrandSettings({ brand }: { brand: Brand }) {
 
         {/* ── Tone Dimensions ─────────────────────────────────────── */}
         <ToneDimensionsEditor brand={brand} />
+
+        {/* ── lnk.bio ─────────────────────────────────────────────── */}
+        <LnkBioSettings brand={brand} />
 
         {/* ── Posting Cadence ─────────────────────────────────────── */}
         <Card>

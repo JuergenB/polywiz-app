@@ -31,6 +31,16 @@ export interface Brand {
   toneNotes?: string;
   /** Default overall voice intensity (0-100). 0=Professional, 50=Balanced, 100=Full Voice. */
   defaultVoiceIntensity?: number;
+  /** Whether lnk.bio integration is enabled (Instagram posts only — creates a link-in-bio entry on publish/schedule). */
+  lnkBioEnabled?: boolean;
+  /** lnk.bio group ID this brand posts into (e.g., "68052" for The Intersect's "Current Posts"). */
+  lnkBioGroupId?: string | null;
+  /** lnk.bio public profile slug — the {username} in https://lnk.bio/{username}. */
+  lnkBioUsername?: string | null;
+  /** Env var name for this brand's lnk.bio OAuth client ID (e.g., "LNKBIO_CLIENT_ID_INTERSECT"). Falls back to LNKBIO_CLIENT_ID. */
+  lnkBioClientIdLabel?: string | null;
+  /** Env var name for this brand's base64-encoded OAuth client secret (e.g., "LNKBIO_CLIENT_SECRET_B64_INTERSECT"). Falls back to LNKBIO_CLIENT_SECRET_B64. */
+  lnkBioClientSecretLabel?: string | null;
   status: "Active" | "Inactive";
 }
 

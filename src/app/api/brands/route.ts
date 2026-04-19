@@ -36,6 +36,11 @@ interface BrandFields {
   "Tone Dimensions": string;
   "Tone Notes": string;
   "Default Voice Intensity": number;
+  "Lnk.Bio Enabled": boolean;
+  "Lnk.Bio Group ID": string;
+  "Lnk.Bio Username": string;
+  "Lnk.Bio Client ID Label": string;
+  "Lnk.Bio Client Secret Label": string;
   Status: "Active" | "Inactive";
 }
 
@@ -79,6 +84,11 @@ function mapBrand(r: { id: string; fields: BrandFields }): Brand {
     toneDimensions: parseToneDimensions(r.fields["Tone Dimensions"]),
     toneNotes: r.fields["Tone Notes"] || undefined,
     defaultVoiceIntensity: r.fields["Default Voice Intensity"] ?? undefined,
+    lnkBioEnabled: r.fields["Lnk.Bio Enabled"] || false,
+    lnkBioGroupId: r.fields["Lnk.Bio Group ID"] || null,
+    lnkBioUsername: r.fields["Lnk.Bio Username"] || null,
+    lnkBioClientIdLabel: r.fields["Lnk.Bio Client ID Label"] || null,
+    lnkBioClientSecretLabel: r.fields["Lnk.Bio Client Secret Label"] || null,
     status: r.fields.Status || "Active",
   };
 }
@@ -133,6 +143,11 @@ export async function PATCH(request: NextRequest) {
       toneDimensions: "Tone Dimensions",
       toneNotes: "Tone Notes",
       defaultVoiceIntensity: "Default Voice Intensity",
+      lnkBioEnabled: "Lnk.Bio Enabled",
+      lnkBioGroupId: "Lnk.Bio Group ID",
+      lnkBioUsername: "Lnk.Bio Username",
+      lnkBioClientIdLabel: "Lnk.Bio Client ID Label",
+      lnkBioClientSecretLabel: "Lnk.Bio Client Secret Label",
       status: "Status",
     };
 

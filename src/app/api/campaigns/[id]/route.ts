@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
 import { deleteShortLinks } from "@/lib/short-io";
+import { deleteLnkBioEntry, resolveCredentials as resolveLnkBioCredentials } from "@/lib/lnk-bio";
 import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
 import type { Campaign, Post, PlatformCadenceConfig } from "@/lib/airtable/types";
 
@@ -265,21 +266,33 @@ export async function DELETE(
       );
     }
 
-    // Resolve brand for Short.io key
+    // Resolve brand for Short.io key + lnk.bio credentials
     let brand: { shortDomain?: string | null; shortApiKeyLabel?: string | null } | undefined;
+    let lnkBioCreds: ReturnType<typeof resolveLnkBioCredentials> = null;
     const brandId = campaign.fields.Brand?.[0];
     if (brandId) {
       try {
-        const brandRecord = await getRecord<{ "Short Domain": string; "Short API Key Label": string }>("Brands", brandId);
+        const brandRecord = await getRecord<{
+          "Short Domain": string;
+          "Short API Key Label": string;
+          "Lnk.Bio Enabled": boolean;
+          "Lnk.Bio Client ID Label": string;
+          "Lnk.Bio Client Secret Label": string;
+        }>("Brands", brandId);
         brand = {
           shortDomain: brandRecord.fields["Short Domain"] || null,
           shortApiKeyLabel: brandRecord.fields["Short API Key Label"] || null,
         };
+        lnkBioCreds = resolveLnkBioCredentials({
+          lnkBioEnabled: brandRecord.fields["Lnk.Bio Enabled"],
+          lnkBioClientIdLabel: brandRecord.fields["Lnk.Bio Client ID Label"] || null,
+          lnkBioClientSecretLabel: brandRecord.fields["Lnk.Bio Client Secret Label"] || null,
+        });
       } catch { /* fall back to global Short.io config */ }
     }
 
     // Delete all linked posts first
-    const allPosts = await listRecords<{ Campaign: string[]; "Short URL": string; "Image URL": string; "Media URLs": string }>("Posts", {});
+    const allPosts = await listRecords<{ Campaign: string[]; "Short URL": string; "Image URL": string; "Media URLs": string; "Lnk.Bio Entry ID": string }>("Posts", {});
     const linkedPosts = allPosts.filter(
       (r) => r.fields.Campaign && r.fields.Campaign.includes(id)
     );
@@ -291,6 +304,25 @@ export async function DELETE(
     if (shortUrls.length > 0) {
       const deleted = await deleteShortLinks(shortUrls, brand);
       console.log(`[delete] Deleted ${deleted}/${shortUrls.length} Short.io links`);
+    }
+
+    // Clean up lnk.bio entries
+    if (lnkBioCreds) {
+      const entryIds = linkedPosts
+        .map((p) => p.fields["Lnk.Bio Entry ID"])
+        .filter(Boolean);
+      let lnkBioDeleted = 0;
+      for (const entryId of entryIds) {
+        try {
+          const ok = await deleteLnkBioEntry(lnkBioCreds, entryId);
+          if (ok) lnkBioDeleted++;
+        } catch (err) {
+          console.warn(`[delete] Failed to delete lnk.bio entry ${entryId}:`, err);
+        }
+      }
+      if (entryIds.length > 0) {
+        console.log(`[delete] Deleted ${lnkBioDeleted}/${entryIds.length} lnk.bio entries`);
+      }
     }
 
     // Clean up Vercel Blob images
