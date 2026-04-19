@@ -8,10 +8,13 @@
 
 import puppeteer from 'puppeteer';
 
+const TEST_EMAIL = process.env.TEST_EMAIL;
+if (!TEST_EMAIL) { console.error("TEST_EMAIL env var required"); process.exit(1); }
+
 const BASE = 'http://localhost:3025';
 const CAMPAIGN_ID = 'recNOknn765LjOlp3';
 const SCREENSHOT_DIR = '/tmp/carousel-preview-test';
-const EMAIL = 'juergen@polymash.com';
+const EMAIL = TEST_EMAIL;
 const PASSWORD = process.env.POLYWIZ_APP_PASSWORD;
 
 async function main() {

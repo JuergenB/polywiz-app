@@ -4,6 +4,9 @@
  */
 import puppeteer from 'puppeteer';
 
+const TEST_EMAIL = process.env.TEST_EMAIL;
+if (!TEST_EMAIL) { console.error("TEST_EMAIL env var required"); process.exit(1); }
+
 const BASE = 'http://localhost:3025';
 const CAMPAIGN_ID = 'recNOknn765LjOlp3';
 const DIR = '/tmp/carousel-preview-test';
@@ -17,7 +20,7 @@ async function main() {
 
   // Sign in
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle0' });
-  await page.type('input[name="email"], input[type="email"]', 'juergen@polymash.com');
+  await page.type('input[name="email"], input[type="email"]', TEST_EMAIL);
   await page.type('input[name="password"], input[type="password"]', process.env.POLYWIZ_APP_PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 }).catch(() => {});

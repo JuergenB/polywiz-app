@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import puppeteer from 'puppeteer';
 
+const TEST_EMAIL = process.env.TEST_EMAIL;
+if (!TEST_EMAIL) { console.error("TEST_EMAIL env var required"); process.exit(1); }
+
 const BASE = 'http://localhost:3025';
 const CAMPAIGN_ID = 'recQGqt86UoWZDORi'; // Campaign with LinkedIn posts
 const DIR = '/tmp/cover-slide-test';
@@ -13,7 +16,7 @@ async function main() {
   const page = await browser.newPage();
 
   await page.goto(`${BASE}/login`, { waitUntil: 'networkidle0' });
-  await page.type('input[type="email"]', 'juergen@polymash.com');
+  await page.type('input[type="email"]', TEST_EMAIL);
   await page.type('input[type="password"]', process.env.POLYWIZ_APP_PASSWORD);
   await page.click('button[type="submit"]');
   await page.waitForNavigation({ waitUntil: 'networkidle0', timeout: 10000 }).catch(() => {});

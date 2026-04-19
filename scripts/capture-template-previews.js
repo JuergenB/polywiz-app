@@ -14,6 +14,9 @@ const puppeteer = require("puppeteer");
 const fs = require("fs");
 const path = require("path");
 
+const TEST_EMAIL = process.env.TEST_EMAIL;
+if (!TEST_EMAIL) { console.error("TEST_EMAIL env var required"); process.exit(1); }
+
 // Not Real Art - Carmen Zella campaign (has multiple images)
 const CAMPAIGN_ID = "rec1hEcznObrGPXUZ";
 const BASE_URL = "http://localhost:3025";
@@ -33,7 +36,7 @@ async function main() {
   // Login first
   console.log("Logging in...");
   await page.goto(`${BASE_URL}/login`, { waitUntil: "networkidle2", timeout: 15000 });
-  await page.type('input[name="email"]', "kbviking@gmail.com");
+  await page.type('input[name="email"]', TEST_EMAIL);
   await page.type('input[name="password"]', process.env.POLYWIZ_APP_PASSWORD);
   await page.click('button[type="submit"]');
   await sleep(3000);
