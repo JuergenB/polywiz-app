@@ -98,7 +98,7 @@ export async function PATCH(
             console.warn("[posts] Failed to read post for Zernio cleanup:", err);
           }
           fields["Zernio Post ID"] = "";
-          fields["Scheduled Date"] = "";
+          fields["Scheduled Date"] = null;
         }
       }
 
