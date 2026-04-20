@@ -61,6 +61,14 @@ export interface ScrapedBlogData {
   author: string | null;
   publishDate: string | null;
   url: string;
+  /** Canonical URL from <meta property="og:url"> if present and different from the scraped URL */
+  ogUrl?: string;
+  /**
+   * Resolved publication URL to use for short links + Claude prompts.
+   * Populated by the generate route via resolvePublicationUrl() after scraping.
+   * Scraping itself still uses `url` (which may be a preview URL).
+   */
+  publicationUrl?: string;
 }
 
 // ── Image filtering ───────────────────────────────────────────────────
@@ -460,6 +468,27 @@ function extractTrailingImages(lines: string[]): {
   return { content: contentLines.join("\n").trim(), movedImages };
 }
 
+// ── og:url extraction ─────────────────────────────────────────────────
+
+/**
+ * Extract the canonical <meta property="og:url"> from Firecrawl metadata
+ * or (as fallback) the raw HTML. Returns undefined if not found.
+ */
+function extractOgUrl(metadata: Record<string, unknown>, html: string): string | undefined {
+  const fromMeta = (metadata?.ogUrl || metadata?.["og:url"]) as string | undefined;
+  if (typeof fromMeta === "string" && fromMeta.trim()) return fromMeta.trim();
+
+  if (html) {
+    // Match <meta property="og:url" content="..."> with content before or after property
+    const htmlMatch =
+      html.match(/<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i) ||
+      html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:url["']/i);
+    if (htmlMatch?.[1]) return htmlMatch[1].trim();
+  }
+
+  return undefined;
+}
+
 // ── Scraping ───────────────────────────────────────────────────────────
 
 /**
@@ -530,6 +559,9 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
     images.unshift({ url: ogImage, alt: metadata.ogTitle || metadata.title || "" });
   }
 
+  // Extract og:url — prefer Firecrawl metadata, fall back to parsing HTML
+  const ogUrl = extractOgUrl(metadata, html);
+
   // ── Parse into semantic sections ───────────────────────────────────
   // For multi-artist posts, increase content limit so sections aren't truncated
   const sections = parseSections(markdown);
@@ -562,6 +594,7 @@ export async function scrapeBlogPost(url: string): Promise<ScrapedBlogData> {
     author: metadata.author || null,
     publishDate: metadata.publishedTime || metadata.articlePublishedTime || null,
     url,
+    ogUrl,
   };
 }
 
@@ -1430,6 +1463,9 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
     images.unshift({ url: ogImage, alt: metadata.ogTitle || metadata.title || "" });
   }
 
+  // Extract og:url — prefer Firecrawl metadata, fall back to parsing HTML
+  const ogUrl = extractOgUrl(metadata, html);
+
   // Truncate content for prompt efficiency
   const truncatedContent = markdown.length > 4000
     ? markdown.slice(0, 4000) + "\n\n[Content truncated for generation...]"
@@ -1486,6 +1522,7 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
     author: metadata.author || null,
     publishDate: metadata.publishedTime || metadata.articlePublishedTime || null,
     url: baseUrl,
+    ogUrl,
   };
 }
 

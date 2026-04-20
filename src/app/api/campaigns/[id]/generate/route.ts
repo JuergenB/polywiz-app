@@ -12,6 +12,7 @@ import {
 } from "@/lib/prompts/blog-post-generator";
 import { composeSystemPrompt, composeUserPrompt } from "@/lib/prompts/compose-prompt";
 import { createPlatformShortLink } from "@/lib/short-io";
+import { resolvePublicationUrl } from "@/lib/publication-url";
 import type { PlatformCadenceConfig } from "@/lib/airtable/types";
 import { getEffectiveCadence } from "@/lib/platform-cadence-defaults";
 
@@ -642,6 +643,17 @@ export async function POST(
           ...(isArtistProfile && artistMeta?.instagramHandle ? { "Artist Handle": artistMeta.instagramHandle } : {}),
         });
 
+        // Resolve publication URL (preview → canonical) once for this generation.
+        // Used for Short.io shortening + Claude prompt URL references.
+        // Scraping still uses blogData.url (may be a preview URL).
+        const publicationUrl = resolvePublicationUrl(blogData.url, blogData.ogUrl);
+        if (publicationUrl !== blogData.url) {
+          console.log(
+            `[campaigns] Detected preview URL — using production URL for short links + copy: ${publicationUrl}`
+          );
+        }
+        blogData.publicationUrl = publicationUrl;
+
         // Analyze sections for section-aware generation
         const contentSections = blogData.sections?.filter((s: ContentSection) => !s.isPreamble) || [];
         const isMultiSection = contentSections.length > 1;
@@ -907,10 +919,12 @@ export async function POST(
         for (const post of result.posts) {
           let shortUrl = "";
           try {
-            // For newsletters with story anchors, use story-specific URL
+            // For newsletters with story anchors, use story-specific URL.
+            // Use resolved publication URL (preview → canonical) so short links
+            // point at the production URL, not the preview token.
             const linkTarget = post.anchor
-              ? `${blogData.url}#${post.anchor}`
-              : blogData.url;
+              ? `${publicationUrl}#${post.anchor}`
+              : publicationUrl;
 
             const link = await createPlatformShortLink(
               linkTarget,
@@ -925,10 +939,17 @@ export async function POST(
             console.warn(`Short link failed for ${post.platform}:`, err);
           }
 
-          // Replace URL in post text with short URL
+          // Replace URL in post text with short URL.
+          // Claude was prompted with publicationUrl, so that's what appears in postText;
+          // also replace the original url as a safety net in case Claude echoed it.
           let postText = post.postText;
-          if (shortUrl && blogData.url) {
-            postText = postText.replace(blogData.url, shortUrl);
+          if (shortUrl) {
+            if (publicationUrl) {
+              postText = postText.replace(publicationUrl, shortUrl);
+            }
+            if (blogData.url && blogData.url !== publicationUrl) {
+              postText = postText.replace(blogData.url, shortUrl);
+            }
           }
 
           postsWithLinks.push({ ...post, postText, shortUrl });
@@ -957,7 +978,7 @@ export async function POST(
             Platform: PLATFORM_TO_AIRTABLE[post.platform] || post.platform,
             Content: post.postText,
             "Image URL": post.imageUrl || "",
-            "Link URL": blogData.url,
+            "Link URL": publicationUrl,
             "Short URL": post.shortUrl || "",
             "Content Variant": String(post.variant),
             Status: "Pending",

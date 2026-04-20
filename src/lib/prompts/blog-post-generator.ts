@@ -207,7 +207,7 @@ ${s.content.slice(0, 1500)}${imgList}
 <article_info>
 Title: ${blogData.title}
 Description: ${blogData.description}
-URL: ${blogData.url}
+URL: ${blogData.publicationUrl ?? blogData.url}
 ${blogData.author ? `Author: ${blogData.author}` : ""}
 </article_info>
 
@@ -287,7 +287,7 @@ IMAGE SELECTION RULES:
     contentBlock = `<blog_post_content>
 Title: ${blogData.title}
 Description: ${blogData.description}
-URL: ${blogData.url}
+URL: ${blogData.publicationUrl ?? blogData.url}
 ${blogData.author ? `Author: ${blogData.author}` : ""}
 
 Content:
@@ -387,7 +387,7 @@ Quality over quantity. Every word must earn its place. Sound like a real person,
 </post_length_guidance>
 
 <link_instructions>
-Include the blog post URL (${blogData.url}) naturally in each post. The URL will be replaced with a shortened tracking link after generation. For platforms where URLs aren't clickable in captions (Instagram), mention "link in bio" instead.
+Include the blog post URL (${blogData.publicationUrl ?? blogData.url}) naturally in each post. The URL will be replaced with a shortened tracking link after generation. For platforms where URLs aren't clickable in captions (Instagram), mention "link in bio" instead.
 </link_instructions>
 
 <output_format>
@@ -403,7 +403,7 @@ Respond with ONLY this JSON structure — no markdown, no explanation, no preamb
       "postText": "The full post text — NO hashtags in the caption for Instagram, LinkedIn, or Facebook (put them in firstComment instead)",
       "firstComment": "Engagement hook + hashtags for platforms that support first comments. See firstComment rules below.",
       "imageUrl": "",
-      "linkUrl": "${blogData.url}"
+      "linkUrl": "${blogData.publicationUrl ?? blogData.url}"
     }
   ]
 }
