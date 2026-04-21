@@ -4,6 +4,7 @@ import { createBrandClient } from "@/lib/late-api/client";
 import { assembleCarouselPDF } from "@/lib/pdf-carousel";
 import { ensureAspectRatio } from "@/lib/image-crop";
 import { parseMediaItems } from "@/lib/media-items";
+import { SLIDE_PLATFORMS } from "@/lib/platform-constants";
 
 interface PostFields {
   Campaign: string[];
@@ -187,6 +188,12 @@ export async function POST(
       const pdfDisplayName = `${(campaign.fields.Name || "Carousel").slice(0, 60)}.pdf`;
       console.log(`[publish-now] PDF uploaded to: ${presignData.publicUrl} (${pdfDisplayName})`);
       mediaItems = [{ type: "document", url: presignData.publicUrl!, filename: pdfDisplayName }];
+    } else if (imageUrls.length > 1 && !SLIDE_PLATFORMS.includes(platform)) {
+      // Non-carousel platforms (Facebook, Pinterest, Twitter, etc.): Zernio
+      // rejects multi-image posts. Match the UI's contract — use the first
+      // image only. See #137.
+      console.log(`[publish-now] ${platform} does not support carousel; using first of ${imageUrls.length} images`);
+      mediaItems = [{ type: "image" as const, url: imageUrls[0] }];
     } else {
       mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
     }

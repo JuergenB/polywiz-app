@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ArrowLeft, X, Maximize2 } from "lucide-react";
 import type { MediaItem } from "@/lib/media-items";
+import { SLIDE_PLATFORMS } from "@/lib/platform-constants";
 
 interface MediaGalleryProps {
   mediaItems: MediaItem[];
@@ -148,7 +149,9 @@ export function MediaGallery({
             ))}
           </div>
           <p className="text-[11px] text-muted-foreground">
-            {mediaImages.length} images — will post as carousel on supported platforms
+            {SLIDE_PLATFORMS.includes(platformLower)
+              ? `${mediaImages.length} images — will post as carousel`
+              : `${mediaImages.length} images — ${platform.charAt(0).toUpperCase()}${platform.slice(1)} supports only a single image; the first image will be used`}
           </p>
         </>
       )}

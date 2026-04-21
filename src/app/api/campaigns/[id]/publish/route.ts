@@ -5,6 +5,7 @@ import { createBrandClient } from "@/lib/late-api/client";
 import { assembleCarouselPDF } from "@/lib/pdf-carousel";
 import { ensureAspectRatio } from "@/lib/image-crop";
 import { parseMediaItems } from "@/lib/media-items";
+import { SLIDE_PLATFORMS } from "@/lib/platform-constants";
 
 interface CampaignFields {
   Name: string;
@@ -175,6 +176,9 @@ export async function POST(
             // Fallback to individual images if presign fails
             mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
           }
+        } else if (imageUrls.length > 1 && !SLIDE_PLATFORMS.includes(platform)) {
+          // Non-carousel platforms: match the UI's contract — first image only. See #137.
+          mediaItems = [{ type: "image" as const, url: imageUrls[0] }];
         } else {
           mediaItems = imageUrls.map((url) => ({ type: "image" as const, url }));
         }
