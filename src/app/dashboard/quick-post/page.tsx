@@ -690,11 +690,11 @@ export default function QuickPostPage() {
         </>
       )}
 
-      {/* ── My Posts section ──────────────────────────────────── */}
+      {/* ── My Quick Post Campaigns section ────────────────────── */}
       {quickPostCampaigns.length > 0 && (
         <>
           <div className="pt-4">
-            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">My Posts</h2>
+            <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">My Quick Post Campaigns</h2>
           </div>
           <Card>
             <CardContent className="pt-4 pb-2">

@@ -146,6 +146,31 @@ export async function PATCH(
 
     await updateRecord("Posts", id, fields);
 
+    // For Quick Post campaigns, mirror the post's primary image into the
+    // campaign's Image URL so the "My Posts" thumbnail shows the user's
+    // uploaded/attached image (Quick Posts often have no og:image on the
+    // source page). Fire-and-forget. See #159.
+    const imageChanged = fields["Image URL"] !== undefined || fields["Media URLs"] !== undefined;
+    if (imageChanged) {
+      (async () => {
+        try {
+          const post = await getRecord<{ Campaign: string[]; "Image URL": string; "Media URLs": string }>("Posts", id);
+          const campaignId = post.fields.Campaign?.[0];
+          if (!campaignId) return;
+          const campaign = await getRecord<{ Name: string }>("Campaigns", campaignId);
+          const name = campaign.fields.Name || "";
+          if (!name.startsWith("Quick Post:")) return;
+          // First URL in Media URLs (comma-separated) or fall back to Image URL
+          const mediaUrls = post.fields["Media URLs"] || "";
+          const firstMedia = mediaUrls.split(",").map((u) => u.trim()).filter(Boolean)[0] || "";
+          const primaryUrl = firstMedia || post.fields["Image URL"] || "";
+          await updateRecord("Campaigns", campaignId, { "Image URL": primaryUrl });
+        } catch (err) {
+          console.warn("[posts] Quick Post campaign image mirror failed:", err);
+        }
+      })();
+    }
+
     // Status changes that should tear down a scheduled lnk.bio entry
     const statusChangedAwayFromScheduled =
       body.status !== undefined && body.status !== "Scheduled" && body.status !== "Published";
