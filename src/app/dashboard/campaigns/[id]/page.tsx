@@ -207,19 +207,21 @@ export default function CampaignDetailPage() {
     const t = searchParams.get("tab");
     return t === "settings" ? "settings" : "posts";
   });
-  // If the URL also has a hash (e.g. #delete-campaign-section), scroll there
-  // once the tab content has mounted.
+  // If the URL has a hash (e.g. #delete-campaign-section) and we're on the
+  // Settings tab, scroll to the bottom of the page — that's where the delete
+  // section lives, and this avoids racing with async-mounted tab content.
   useEffect(() => {
     if (activeTab !== "settings") return;
     const hash = typeof window !== "undefined" ? window.location.hash : "";
     if (!hash) return;
-    const id = hash.replace(/^#/, "");
-    const attempt = () => {
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
-    };
-    // Two frames: one for tab to render, one for content to layout.
-    requestAnimationFrame(() => requestAnimationFrame(attempt));
+
+    // Small delay so tab content + campaign data have time to render.
+    const timeoutId = window.setTimeout(() => {
+      window.scrollTo({ top: document.body.scrollHeight, behavior: "smooth" });
+      // Clear the hash so re-visiting this tab doesn't re-scroll.
+      history.replaceState(null, "", window.location.pathname + window.location.search);
+    }, 400);
+    return () => window.clearTimeout(timeoutId);
   }, [activeTab]);
   const queryClient = useQueryClient();
   const { markNew, dismissNew, isNew } = useNewPosts();
