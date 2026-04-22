@@ -104,10 +104,10 @@ Instagram, TikTok, YouTube, LinkedIn, Pinterest, X/Twitter, Facebook, Threads, B
 
 | Phase | Focus | Status |
 |-------|-------|--------|
-| **I** | Create a campaign from a newsletter URL → draft posts → approve → schedule | Nearing completion |
-| **II** | Per-platform scheduling controls, distribution slider, multi-brand switching | Planned |
-| **III** | Image formatting, carousel templates, team input workflows, deep research | Planned |
-| **IV** | Performance tracking, automated triggers, production deployment | Planned |
+| **I** | Create a campaign from a newsletter URL → draft posts → approve → schedule | Complete |
+| **II** | Per-platform scheduling controls, distribution slider, multi-brand switching | In progress |
+| **III** | Image formatting, carousel templates, cover slide designer, team input workflows | In progress |
+| **IV** | Performance tracking, automated triggers, production deployment | Live in production |
 
 Phase I starts with **The Intersect newsletter** as the first campaign type.
 
@@ -179,15 +179,26 @@ See [GETTING_STARTED.md](GETTING_STARTED.md) for the full development guide.
 - [x] **Phase I:** Single-post Publish Now button with double-publish guard
 - [x] **Phase I:** Zernio webhook status sync (post.published/failed/partial → Airtable)
 - [x] **Phase I:** LinkedIn PDF carousel — auto-assemble multi-image posts into PDF at publish time (#65)
-- [x] **Phase I:** lnk.bio integration — auto-create link-in-bio entry after Instagram publish (#52 partial)
+- [x] **Phase I:** lnk.bio per-brand lifecycle sync — auto-create on Instagram schedule/publish, sync across delete/revert/reschedule/edit/failure (7 transitions); per-brand credentials and enable toggle
 - [x] **Phase I:** Failed post handling — Retry (reset to Approved, clear Zernio state) and Delete (with blob/short.io cleanup) in list and detail views
 - [x] **Phase I:** Zernio schedule sync — fetch current dates/statuses from Zernio and update Airtable to fix drift
 - [x] **Phase I:** Server-side Sharp image optimization (PNG/WebP→JPEG, re-compress >500KB)
 - [x] **Phase I:** Platform aspect ratio auto-crop (Instagram/Threads 1.91:1 max enforced)
+- [x] **Phase II:** Brand switching at dashboard level (#41)
+- [x] **Phase II:** Quick Post — single-post composer with first comment, collaborators, image tags
+- [x] **Phase II:** Post detail UX — Unschedule control, popover schedule picker, broader cache invalidation
+- [x] **Phase II:** Post reordering — drag-and-drop on approved posts, persisted Sort Order honored by scheduler
+- [x] **Phase II:** Campaign archive + cleanup — hide from default views, optional cleanup of Pending/Dismissed posts cascading to Short.io, lnk.bio, and Zernio
+- [x] **Phase II:** Dashboard "Needs Your Attention" panel — unified cross-campaign view of posts needing approval, images, scheduling, or that have failed
+- [x] **Phase II:** Instagram collaboration invites (up to 3 collab usernames, co-publishes to both feeds) and image user tags
+- [x] **Phase II:** Campaign image library — scraped images surfaced as clickable thumbnails when adding images to posts
+- [x] **Phase II:** Image caption extraction — figcaption / wp-caption parsing flows through to post media captions
+- [x] **Phase III:** Cover slide designer — band-based layout engine (Satori + Sharp), Airtable-driven templates, AI text generation, eyedropper color picker
+- [x] **Phase III:** Card designer with URL-based tracking and slide exclusion
+- [x] **Phase III:** Multi-image carousel handling matched to platform capability — LinkedIn PDF assembly; non-carousel platforms (Facebook, Pinterest, etc.) fall back to first image with honest UI messaging
 - [ ] **Phase II:** Platform-aware campaign distribution (#18)
 - [ ] **Phase II:** Per-platform cadence controls
 - [ ] **Phase II:** Distribution slider (interactive, per-platform)
-- [x] **Phase II:** Brand switching at dashboard level (#41)
 
 ## Content Intelligence
 
@@ -235,7 +246,9 @@ The system generates drafts. Humans approve, edit, or dismiss every post before 
 | **Image Optimization** | Sharp | Server-side PNG/WebP to JPEG conversion, re-compression |
 | **Image AI** | Replicate (Flux models) | AI outpainting for aspect ratio correction |
 | **PDF Generation** | pdf-lib | LinkedIn PDF carousel assembly from multi-image posts |
-| **Link-in-Bio** | lnk.bio (OAuth2) | Auto-create link-in-bio entries after Instagram publish |
+| **Cover Slide Rendering** | Satori + Sharp | Band-based layout engine for editorial carousel cover slides |
+| **Drag and Drop** | @dnd-kit/core, @dnd-kit/sortable | Approved-post reordering on the campaign detail page |
+| **Link-in-Bio** | lnk.bio (OAuth2) | Per-brand link-in-bio entries kept in sync with Instagram post lifecycle |
 | **Deployment** | Vercel | Hosting, serverless functions, blob storage |
 
 ## Technical Details
