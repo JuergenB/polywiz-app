@@ -322,9 +322,12 @@ export async function PATCH(
           // Sync firstComment + collaboration fields to Zernio (Instagram-specific).
           // CRITICAL: Zernio requires platformSpecificData to be nested INSIDE
           // each platforms[] entry. A root-level platformSpecificData is silently
-          // ignored on update (HTTP 200 but no fields applied). The platforms[]
-          // entry MUST also include accountId — sending platforms without
-          // accountId nullifies the account link on the post.
+          // ignored on update. The platforms[] entry MUST also include
+          // accountId — sending platforms without accountId nullifies the
+          // account link on the post.
+          // For collaborators and userTags we ALWAYS send the array (even if
+          // empty) so clearing them in the UI propagates — omitting the key
+          // leaves Zernio's prior value intact.
           const platform = (post.fields.Platform || "").toLowerCase();
           const psd: Record<string, unknown> = {};
           if (platform === "instagram") {
@@ -335,17 +338,18 @@ export async function PATCH(
               const collabs: string[] = post.fields.Collaborators
                 ? JSON.parse(post.fields.Collaborators)
                 : [];
-              const cleaned = collabs.map((u) => u.replace(/^@/, ""));
-              if (cleaned.length > 0) psd.collaborators = cleaned;
-            } catch { /* ignore malformed JSON */ }
+              psd.collaborators = collabs.map((u) => u.replace(/^@/, ""));
+            } catch {
+              psd.collaborators = [];
+            }
             try {
               const tags: string[] = post.fields["User Tags"]
                 ? JSON.parse(post.fields["User Tags"])
                 : [];
-              if (tags.length > 0) {
-                psd.userTags = tags.map((u) => ({ username: u.replace(/^@/, ""), x: 0.5, y: 0.5 }));
-              }
-            } catch { /* ignore malformed JSON */ }
+              psd.userTags = tags.map((u) => ({ username: u.replace(/^@/, ""), x: 0.5, y: 0.5 }));
+            } catch {
+              psd.userTags = [];
+            }
           } else if (["facebook", "linkedin"].includes(platform)) {
             if (post.fields["First Comment"]) {
               psd.firstComment = post.fields["First Comment"];

@@ -907,13 +907,15 @@ export async function renderCoverSlide(
       if (logoResponse.ok) {
         const logoBuffer = Buffer.from(await logoResponse.arrayBuffer());
         const brandBand = brandingBandEntry.band as BrandingBand;
+        // Safe-area horizontal padding: the band's vertical padding is tuned for
+        // the band height, but horizontal margins need to be wider to keep the
+        // logo clear of platform-specific card clipping (e.g. lnk.bio, IG feed).
         const padding = brandBand.padding;
-        // Logo sizing: use the resolved band height (which includes flex redistribution).
-        // On the original Quote Dark, flex gives ~174px band → 134px logo at 1350h.
-        // Square (1:1) layouts get a smaller logo to avoid overcrowding the branding band.
+        const logoPadding = Math.max(padding, Math.round(width * 0.06));
+        // Logo sizing: 15% smaller defaults across layouts to leave breathing room.
         const isSquare = Math.abs(width - height) < 50;
-        const defaultLogoScale = isSquare ? 0.14 : 0.20;
-        const maxLogoH = Math.max(isSquare ? 80 : 120, Math.round(brandingBandEntry.height - padding * 2));
+        const defaultLogoScale = isSquare ? 0.119 : 0.17;
+        const maxLogoH = Math.max(isSquare ? 68 : 102, Math.round(brandingBandEntry.height - padding * 2));
         const maxLogoW = Math.round(width * (logoScale ?? defaultLogoScale));
 
         // Subtle logo: light enough to read as a watermark, not a stamp
@@ -936,11 +938,11 @@ export async function renderCoverSlide(
 
         let logoX: number;
         if (brandBand.position === "bottom-right") {
-          logoX = width - logoW - padding;
+          logoX = width - logoW - logoPadding;
         } else if (brandBand.position === "center") {
           logoX = Math.round((width - logoW) / 2);
         } else {
-          logoX = padding;
+          logoX = logoPadding;
         }
 
         // Place logo so it fits within the card. For banded quotable, pin to bottom.
