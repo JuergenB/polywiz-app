@@ -654,9 +654,6 @@ export function CampaignPostDetail({
                 <Send className="mr-1 h-3 w-3" />
                 Scheduled
               </Badge>
-              <span className="text-[10px] text-muted-foreground">
-                Edits auto-sync to Zernio
-              </span>
               <Button
                 variant="ghost"
                 size="sm"
