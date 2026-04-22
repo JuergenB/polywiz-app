@@ -319,14 +319,18 @@ export async function PATCH(
             updateBody.scheduledFor = post.fields["Scheduled Date"];
           }
 
-          // Sync firstComment + collaboration fields to Zernio (Instagram-specific)
+          // Sync firstComment + collaboration fields to Zernio (Instagram-specific).
+          // CRITICAL: Zernio requires platformSpecificData to be nested INSIDE
+          // each platforms[] entry. A root-level platformSpecificData is silently
+          // ignored on update (HTTP 200 but no fields applied). The platforms[]
+          // entry MUST also include accountId — sending platforms without
+          // accountId nullifies the account link on the post.
           const platform = (post.fields.Platform || "").toLowerCase();
+          const psd: Record<string, unknown> = {};
           if (platform === "instagram") {
-            const psd: Record<string, unknown> = {};
             if (post.fields["First Comment"]) {
               psd.firstComment = post.fields["First Comment"];
             }
-            // Collaborators: JSON array of usernames
             try {
               const collabs: string[] = post.fields.Collaborators
                 ? JSON.parse(post.fields.Collaborators)
@@ -334,7 +338,6 @@ export async function PATCH(
               const cleaned = collabs.map((u) => u.replace(/^@/, ""));
               if (cleaned.length > 0) psd.collaborators = cleaned;
             } catch { /* ignore malformed JSON */ }
-            // User Tags: JSON array of usernames → {username, x, y} objects
             try {
               const tags: string[] = post.fields["User Tags"]
                 ? JSON.parse(post.fields["User Tags"])
@@ -343,15 +346,29 @@ export async function PATCH(
                 psd.userTags = tags.map((u) => ({ username: u.replace(/^@/, ""), x: 0.5, y: 0.5 }));
               }
             } catch { /* ignore malformed JSON */ }
-            if (Object.keys(psd).length > 0) {
-              updateBody.platformSpecificData = psd;
-            }
           } else if (["facebook", "linkedin"].includes(platform)) {
-            // Non-Instagram platforms: firstComment only
             if (post.fields["First Comment"]) {
-              updateBody.platformSpecificData = {
-                firstComment: post.fields["First Comment"],
-              };
+              psd.firstComment = post.fields["First Comment"];
+            }
+          }
+          if (Object.keys(psd).length > 0) {
+            // Fetch the live Zernio post to get the current accountId — without
+            // it, the platforms array replacement nullifies the account link.
+            const { data: existing } = await client.posts.getPost({
+              path: { postId: zernioPostId },
+            });
+            const existingPlatform = (existing as { post?: { platforms?: Array<{ platform?: string; accountId?: string | { _id: string } }> } })?.post?.platforms?.find((p) => p.platform === platform);
+            const accountId = typeof existingPlatform?.accountId === "string"
+              ? existingPlatform.accountId
+              : existingPlatform?.accountId?._id;
+            if (accountId) {
+              updateBody.platforms = [{
+                platform,
+                accountId,
+                platformSpecificData: psd,
+              }];
+            } else {
+              console.warn(`[posts] Skipping platformSpecificData sync for ${zernioPostId}: could not resolve accountId from existing post`);
             }
           }
 
