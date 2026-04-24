@@ -12,6 +12,8 @@
  * API docs: https://docs.firecrawl.dev/introduction
  */
 
+import { preferUncroppedVariants } from "@/lib/image-source";
+
 const FIRECRAWL_BASE = "https://api.firecrawl.dev/v1";
 
 function getApiKey(): string {
@@ -1462,6 +1464,12 @@ export async function scrapeNewsletter(url: string): Promise<ScrapedBlogData> {
   if (ogImage && !images.some((img) => img.url.split("?")[0] === ogImage.split("?")[0])) {
     images.unshift({ url: ogImage, alt: metadata.ogTitle || metadata.title || "" });
   }
+
+  // Prefer uncropped source variants where we can identify them (e.g. Curated.co's
+  // `twenty_by_nine_*` CDN variants → `original_ratio_extra_large`). Fails gracefully
+  // per-URL: any rewrite whose HEAD check doesn't come back 2xx falls back to the
+  // original URL, so this can never break a scrape.
+  images = await preferUncroppedVariants(images);
 
   // Extract og:url — prefer Firecrawl metadata, fall back to parsing HTML
   const ogUrl = extractOgUrl(metadata, html);
