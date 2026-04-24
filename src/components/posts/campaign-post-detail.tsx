@@ -75,6 +75,7 @@ import {
   CalendarX,
   CheckCircle2,
   Clock,
+  Copy,
   ExternalLink,
   Loader2,
   MoreHorizontal,
@@ -397,6 +398,19 @@ export function CampaignPostDetail({
             onReorderImages={media.reorderImages}
             onUpdateCaption={media.updateCaption}
             onSaveCaption={media.saveCaption}
+            coverSlideIndex={
+              hasCoverSlide &&
+              savedCoverSlideData?.appliedUrl &&
+              mediaItems[0]?.url === savedCoverSlideData.appliedUrl &&
+              post.status !== "Published"
+                ? 0
+                : null
+            }
+            onEditCoverSlide={() => {
+              setNewCardImageIndex(null);
+              setCardInsertPosition("prepend");
+              setShowCoverSlideDesigner(true);
+            }}
             toolbarSlot={mediaToolbar}
           />
 
@@ -496,6 +510,20 @@ export function CampaignPostDetail({
         mediaItems={mediaItems}
         initialIndex={lightboxIndex}
         slidesApplied={slidesApplied}
+        coverSlideIndex={
+          hasCoverSlide &&
+          savedCoverSlideData?.appliedUrl &&
+          mediaItems[0]?.url === savedCoverSlideData.appliedUrl &&
+          post.status !== "Published"
+            ? 0
+            : null
+        }
+        onEditCoverSlide={() => {
+          setLightboxOpen(false);
+          setNewCardImageIndex(null);
+          setCardInsertPosition("prepend");
+          setShowCoverSlideDesigner(true);
+        }}
       />
 
       {/* Cover slide designer */}
@@ -513,14 +541,36 @@ export function CampaignPostDetail({
           brandWebsiteUrl={currentBrand?.websiteUrl || null}
           savedData={newCardImageIndex !== null ? null : savedCoverSlideData}
           insertPosition={cardInsertPosition}
-          availableImages={
-            newCardImageIndex !== null
-              ? [mediaItems[newCardImageIndex]].filter(Boolean)
-              : mediaItems.filter((_, i) => {
-                  if (savedCoverSlideData?.appliedUrl && i === 0 && mediaItems[0]?.url === savedCoverSlideData.appliedUrl) return false;
-                  return true;
-                })
-          }
+          availableImages={(() => {
+            if (newCardImageIndex !== null) {
+              return [mediaItems[newCardImageIndex]].filter(Boolean);
+            }
+            // Re-editing an existing cover: prefer the persisted sourceImageUrl,
+            // fall back to the Original Media backup. mediaItems[0] is the
+            // already-rendered cover PNG, which is useless as a source.
+            const result: Array<{ url: string; caption: string }> = [];
+            if (hasCoverSlide && savedCoverSlideData?.sourceImageUrl) {
+              result.push({ url: savedCoverSlideData.sourceImageUrl, caption: "" });
+            }
+            if (hasCoverSlide && post.originalMedia) {
+              try {
+                const originals = JSON.parse(post.originalMedia) as Array<{ url?: string; caption?: string }>;
+                if (Array.isArray(originals)) {
+                  for (const o of originals) {
+                    if (!o.url) continue;
+                    if (result.some((r) => r.url === o.url)) continue;
+                    result.push({ url: o.url, caption: o.caption || "" });
+                  }
+                }
+              } catch { /* fall through */ }
+            }
+            if (result.length > 0) return result;
+            // Designing a brand-new cover: use current media items (no cover exists yet to skip).
+            return mediaItems.filter((_, i) => {
+              if (savedCoverSlideData?.appliedUrl && i === 0 && mediaItems[0]?.url === savedCoverSlideData.appliedUrl) return false;
+              return true;
+            });
+          })()}
           onApply={(newMediaItems) => {
             setMediaItems(newMediaItems);
             setShowCoverSlideDesigner(false);
@@ -767,6 +817,19 @@ export function CampaignPostDetail({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem
+              onClick={() => {
+                navigator.clipboard.writeText(post.id);
+                import("sonner").then(({ toast }) => toast.success(`Copied ${post.id}`));
+              }}
+            >
+              <Copy className="mr-2 h-3.5 w-3.5" />
+              Copy post ID
+              <span className="ml-auto pl-2 font-mono text-[10px] text-muted-foreground">
+                {post.id.slice(-6)}
+              </span>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => setFlagDialogOpen(true)}>
               <Flag className="mr-2 h-3.5 w-3.5" />
               Flag Issue

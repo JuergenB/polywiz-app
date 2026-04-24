@@ -2,7 +2,7 @@
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { ArrowLeft, X, Maximize2 } from "lucide-react";
+import { ArrowLeft, X, Maximize2, Pencil } from "lucide-react";
 import type { MediaItem } from "@/lib/media-items";
 import { SLIDE_PLATFORMS } from "@/lib/platform-constants";
 
@@ -17,6 +17,10 @@ interface MediaGalleryProps {
   onReorderImages?: (fromIndex: number, toIndex: number) => void;
   onUpdateCaption?: (index: number, caption: string) => void;
   onSaveCaption?: (index: number) => void;
+  /** Index of a designed cover slide that can be re-opened in the designer. */
+  coverSlideIndex?: number | null;
+  /** Callback when the user clicks the pencil on the designed cover. */
+  onEditCoverSlide?: () => void;
   /** Slot for toolbar buttons below the gallery */
   toolbarSlot?: React.ReactNode;
   className?: string;
@@ -33,6 +37,8 @@ export function MediaGallery({
   onReorderImages,
   onUpdateCaption,
   onSaveCaption,
+  coverSlideIndex,
+  onEditCoverSlide,
   toolbarSlot,
   className,
 }: MediaGalleryProps) {
@@ -64,6 +70,17 @@ export function MediaGallery({
               onClick={(e) => { e.stopPropagation(); onRemoveImage(0); }}
             >
               <X className="h-3 w-3" />
+            </Button>
+          )}
+          {onEditCoverSlide && coverSlideIndex === 0 && (
+            <Button
+              variant="secondary"
+              size="icon"
+              title="Edit cover slide"
+              className="absolute top-2 right-10 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+              onClick={(e) => { e.stopPropagation(); onEditCoverSlide(); }}
+            >
+              <Pencil className="h-3 w-3" />
             </Button>
           )}
         </div>
@@ -121,6 +138,18 @@ export function MediaGallery({
                       onClick={(e) => { e.stopPropagation(); onRemoveImage(idx); }}
                     >
                       <X className="h-3 w-3" />
+                    </Button>
+                  )}
+                  {/* Edit cover slide pencil — only on the designed cover */}
+                  {onEditCoverSlide && coverSlideIndex === idx && (
+                    <Button
+                      variant="secondary"
+                      size="icon"
+                      title="Edit cover slide"
+                      className="absolute top-1 right-8 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={(e) => { e.stopPropagation(); onEditCoverSlide(); }}
+                    >
+                      <Pencil className="h-3 w-3" />
                     </Button>
                   )}
                   {/* Slide number */}

@@ -43,3 +43,33 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 docs/background/Arterial & Not Real Art Invite Link.md
+
+# Throwaway one-off scripts (verification runs, screenshots, debug probes)
+scripts/debug-*.mjs
+scripts/screenshot-*.mjs
+scripts/shot-*.mjs
+scripts/spike-*.mjs
+scripts/hover-*.mjs
+scripts/verify-[0-9]*.mjs
+scripts/verify-attention-*.mjs
+scripts/verify-carousel-preview-*.mjs
+scripts/verify-confirms.mjs
+scripts/verify-footer-label.mjs
+scripts/verify-reschedule-*.mjs
+scripts/verify-unschedule-*.mjs
+scripts/backfill-artsville-*.mjs
+scripts/check-lnkbio-*.mjs
+scripts/find-*-drifted-*.mjs
+scripts/list-brand-*.mjs
+scripts/match-linkin-to-*.mjs
+scripts/move-lnkbio-*.mjs
+scripts/probe-artsville-*.mjs
+scripts/probe-lnk-edit.mjs
+scripts/probe-lnkbio-endpoints.mjs
+scripts/recreate-test-*.mjs
+scripts/scrape-linkin-*.mjs
+scripts/test-artsville-*.mjs
+scripts/test-reschedule-*.mjs
+
+# Local env backups
+.env.local.bak.*

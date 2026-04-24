@@ -146,7 +146,7 @@ polywiz-app/
 - **Auth:** Bearer token (`sk_` prefixed), stored in `LATE_API_KEY` env var
 - **SDK:** `@getlatedev/node` (npm package)
 - **CLI:** `@zernio/cli` (global install)
-- **Key endpoints:** See `docs/zernio-api-openapi.yaml`
+- **Key endpoints:** See `docs/zernio-api-openapi.yaml` (inventory) and `docs/reference/zernio-api.md` (project-specific quirks, best-time response shape, update gotchas)
 - **Rate limits:** Vary by plan (Free: 60/min, Build: 120/min)
 - **Response shape:** `createPost` returns `{ post: { _id: "..." }, message: "..." }` — the post ID is nested under `.post._id`, NOT at the top level `._id`. Always extract via `data.post._id`.
 - **Campaign-relevant features:**

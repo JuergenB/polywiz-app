@@ -209,6 +209,7 @@ export async function PATCH(
             "Lnk.Bio Group ID": string;
             "Lnk.Bio Client ID Label": string;
             "Lnk.Bio Client Secret Label": string;
+            Timezone: string;
           }>("Brands", brandId);
 
           const { deleteLnkBioEntry, createLnkBioEntry, resolveCredentials, resolveConfig } =
@@ -249,6 +250,7 @@ export async function PATCH(
               link: shortUrl,
               image: post.fields["Image URL"] || "",
               scheduledDate: post.fields["Scheduled Date"],
+              timezone: brand.fields.Timezone || "America/New_York",
             });
             await updateRecord("Posts", id, { "Lnk.Bio Entry ID": newId || "" });
           } catch (err) {

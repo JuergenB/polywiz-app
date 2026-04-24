@@ -123,6 +123,8 @@ export interface CreateLnkBioEntryOptions {
   link: string;
   image?: string;
   scheduledDate?: string;
+  /** IANA timezone for rendering schedule_from (e.g. "America/New_York"). */
+  timezone?: string;
 }
 
 /**
@@ -139,11 +141,22 @@ export async function createLnkBioEntry(
   };
   if (options.image) params.image = options.image;
   if (options.scheduledDate) {
-    // lnk.bio requires strict RFC3339 with an explicit offset (Z or ±HH:MM) and no fractional seconds.
-    // Previous impl used `d.getHours()` (server-local) with a hardcoded `-04:00` — on Vercel (UTC)
-    // that shifted ET schedules by +4h, and even on an ET server would drift by 1h in EST (winter).
-    // UTC Z is DST-free and unambiguous.
-    params.schedule_from = new Date(options.scheduledDate).toISOString().replace(/\.\d{3}Z$/, "Z");
+    // lnk.bio's UI displays schedule_from as the literal wall-clock value of
+    // whatever we send — it does NOT convert to the viewer's timezone. So
+    // sending UTC `Z` (the previous fix's approach) caused 8 AM ET to render
+    // as "12 PM" on the dashboard. We have to send the wall time in the
+    // brand's local timezone with explicit offset (DST-correct).
+    const { formatInTimeZone } = await import("date-fns-tz");
+    const tz = options.timezone || "America/New_York";
+    const when = new Date(options.scheduledDate);
+    params.schedule_from = formatInTimeZone(when, tz, "yyyy-MM-dd'T'HH:mm:ssXXX");
+    // NOTE: we do NOT send a `position` param. Empirically, lnk.bio's
+    // Current Posts grid sorts scheduled entries by creation time descending
+    // (newest-created at top) and ignores the `position` value. Probe results
+    // 2026-04-24. Display order of scheduled entries is therefore controlled
+    // by creation sequence — individual creates land at top; bulk backfills
+    // must iterate earliest-schedule-first so the furthest-future entry is
+    // created last and ends up on top.
   }
 
   const result = await lnkBioRequest(config, "/lnk/add", "POST", params);

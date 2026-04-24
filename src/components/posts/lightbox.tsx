@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
-import { X, ArrowLeft } from "lucide-react";
+import { X, ArrowLeft, Pencil } from "lucide-react";
 import type { MediaItem } from "@/lib/media-items";
 
 // ── Wheel debounce ─────────────────────────────────────────────────────
@@ -48,6 +48,10 @@ interface LightboxProps {
   initialIndex?: number;
   /** Whether captions are baked into slides (hides caption text) */
   slidesApplied?: boolean;
+  /** Index of a designed cover slide (if any) that can be re-opened in the designer. */
+  coverSlideIndex?: number | null;
+  /** Callback when the user clicks Edit on the designed cover in the lightbox. */
+  onEditCoverSlide?: () => void;
 }
 
 export function Lightbox({
@@ -57,6 +61,8 @@ export function Lightbox({
   mediaItems,
   initialIndex = 0,
   slidesApplied = false,
+  coverSlideIndex,
+  onEditCoverSlide,
 }: LightboxProps) {
   const [index, setIndex] = useState(initialIndex);
 
@@ -106,6 +112,18 @@ export function Lightbox({
           onNext={onNext}
           onClose={onClose}
         />
+
+        {/* Edit cover slide button — only shown on the designed cover index */}
+        {onEditCoverSlide && coverSlideIndex === index && (
+          <button
+            onClick={() => { onClose(); onEditCoverSlide(); }}
+            title="Edit cover slide"
+            className="absolute top-4 right-16 z-10 flex items-center gap-1.5 text-white/70 hover:text-white bg-white/10 hover:bg-white/20 rounded-full px-3 py-2 text-xs transition-colors"
+          >
+            <Pencil className="h-4 w-4" />
+            Edit cover
+          </button>
+        )}
 
         {/* Close button */}
         <button

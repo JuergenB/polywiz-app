@@ -290,6 +290,7 @@ export async function POST(
             link: post.fields["Short URL"],
             image: post.fields["Image URL"] || "",
             scheduledDate: publishAt,
+            timezone: brandRecord.fields.Timezone || "America/New_York",
           });
           if (entryId) {
             airtableUpdates["Lnk.Bio Entry ID"] = entryId;

@@ -235,4 +235,11 @@ export interface CoverSlideData {
    * Tracked by URL (not position) so reordering doesn't break exclusion.
    */
   designedCardUrls?: string[];
+  /** Render options (persisted so the card can be re-opened in the designer). */
+  overlayOpacity?: number;
+  overlayTint?: string;
+  keepOriginalColors?: boolean;
+  blurBackground?: boolean;
+  /** Raw-image URL used as the background, so re-edit can render from the same source. */
+  sourceImageUrl?: string;
 }

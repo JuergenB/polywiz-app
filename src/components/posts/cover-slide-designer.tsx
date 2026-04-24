@@ -26,6 +26,8 @@ import {
 import { toast } from "sonner";
 import type { CoverSlideTemplate, CoverSlideData } from "@/lib/cover-slide-types";
 import type { MediaItem } from "@/lib/media-items";
+import { ImageDropZone } from "./image-drop-zone";
+import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -386,12 +388,58 @@ export function CoverSlideDesigner({
   );
   const [showLogo, setShowLogo] = useState(true);
   const [showLinkInBio, setShowLinkInBio] = useState(platform.toLowerCase() === "instagram");
-  const [sourceImageIndex, setSourceImageIndex] = useState(0);
-  const sourceImages = availableImages || [];
-  const [overlayOpacity, setOverlayOpacity] = useState<number>(50);
-  const [overlayTint, setOverlayTint] = useState<string | undefined>(undefined);
-  const [keepOriginalColors, setKeepOriginalColors] = useState(false);
-  const [blurBackground, setBlurBackground] = useState(false);
+  const [extraSources, setExtraSources] = useState<Array<{ url: string; caption: string }>>([]);
+  const [showAddSource, setShowAddSource] = useState(false);
+  const [sourceUploading, setSourceUploading] = useState(false);
+  const sourceImages = [...(availableImages || []), ...extraSources];
+  const [sourceImageIndex, setSourceImageIndex] = useState(() => {
+    if (savedData?.sourceImageUrl) {
+      const idx = sourceImages.findIndex((img) => img.url === savedData.sourceImageUrl);
+      if (idx >= 0) return idx;
+    }
+    return 0;
+  });
+
+  const handleAddSourceFile = async (file: File) => {
+    setSourceUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/posts/${postId}/cover-slide/upload-source`, {
+        method: "POST",
+        body: fd,
+      });
+      if (!res.ok) throw new Error(`Upload failed (${res.status})`);
+      const { url } = await res.json() as { url: string };
+      setExtraSources((prev) => [...prev, { url, caption: "" }]);
+      setSourceImageIndex(sourceImages.length);
+      setShowAddSource(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setSourceUploading(false);
+    }
+  };
+
+  const handleAddSourceUrl = (url: string) => {
+    const clean = url.trim();
+    if (!clean) return;
+    setExtraSources((prev) => [...prev, { url: clean, caption: "" }]);
+    setSourceImageIndex(sourceImages.length);
+    setShowAddSource(false);
+  };
+  const [overlayOpacity, setOverlayOpacity] = useState<number>(
+    savedData?.overlayOpacity ?? 50,
+  );
+  const [overlayTint, setOverlayTint] = useState<string | undefined>(
+    savedData?.overlayTint,
+  );
+  const [keepOriginalColors, setKeepOriginalColors] = useState(
+    savedData?.keepOriginalColors ?? false,
+  );
+  const [blurBackground, setBlurBackground] = useState(
+    savedData?.blurBackground ?? false,
+  );
 
   // Preview debounce
   const previewTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -408,12 +456,18 @@ export function CoverSlideDesigner({
     },
   });
 
-  // If we have saved data, auto-select the template
+  // If we have saved data, auto-select the template and fire an initial preview.
+  // The other preview useEffect only fires on state *changes*, so re-opening
+  // with saved state won't render unless we kick it here.
   useEffect(() => {
     if (savedData && templatesQuery.data) {
       const saved = templatesQuery.data.find((t) => t.id === savedData.templateId);
-      if (saved) setSelectedTemplate(saved);
+      if (saved) {
+        setSelectedTemplate(saved);
+        requestPreview();
+      }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [savedData, templatesQuery.data]);
 
   // AI content generation
@@ -996,32 +1050,61 @@ export function CoverSlideDesigner({
             </div>
           )}
 
-          {/* Background image selector — compact: single preview + arrows */}
-          {sourceImages.length > 1 && (
-            <div>
-              <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Background</span>
-              <div className="flex items-center gap-1.5 mt-1">
-                <button
-                  onClick={() => setSourceImageIndex((sourceImageIndex - 1 + sourceImages.length) % sourceImages.length)}
-                  className="text-white/30 hover:text-white/70 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-                >
-                  <ChevronLeft className="h-3 w-3" />
-                </button>
-                <div className="flex-1 flex items-center justify-center">
+          {/* Background image selector — compact: single preview + arrows + add */}
+          <div>
+            <span className="text-white/50 text-[10px] font-medium uppercase tracking-wide">Background</span>
+            <div className="flex items-center gap-1.5 mt-1">
+              <button
+                onClick={() => setSourceImageIndex((sourceImageIndex - 1 + sourceImages.length) % sourceImages.length)}
+                disabled={sourceImages.length <= 1}
+                className="text-white/30 hover:text-white/70 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="h-3 w-3" />
+              </button>
+              <div className="flex-1 flex items-center justify-center">
+                {sourceImages.length > 0 ? (
                   <div className="w-12 h-12 rounded overflow-hidden border border-zinc-600/50">
                     <img src={sourceImages[sourceImageIndex]?.url} alt="" className="w-full h-full object-cover" />
                   </div>
-                  <span className="text-white/25 text-[9px] ml-1.5 tabular-nums">{sourceImageIndex + 1}/{sourceImages.length}</span>
-                </div>
-                <button
-                  onClick={() => setSourceImageIndex((sourceImageIndex + 1) % sourceImages.length)}
-                  className="text-white/30 hover:text-white/70 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
-                >
-                  <ChevronRight className="h-3 w-3" />
-                </button>
+                ) : (
+                  <div className="w-12 h-12 rounded border border-dashed border-zinc-600/50 flex items-center justify-center text-white/30 text-[9px]">
+                    none
+                  </div>
+                )}
+                <span className="text-white/25 text-[9px] ml-1.5 tabular-nums">
+                  {sourceImages.length > 0 ? `${sourceImageIndex + 1}/${sourceImages.length}` : "0/0"}
+                </span>
               </div>
+              <button
+                onClick={() => setSourceImageIndex((sourceImageIndex + 1) % Math.max(sourceImages.length, 1))}
+                disabled={sourceImages.length <= 1}
+                className="text-white/30 hover:text-white/70 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="h-3 w-3" />
+              </button>
+              <button
+                onClick={() => setShowAddSource((v) => !v)}
+                title="Add background image (upload or URL)"
+                className="text-white/40 hover:text-white/80 p-0.5 rounded hover:bg-white/10 transition-colors shrink-0"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
             </div>
-          )}
+            <Dialog open={showAddSource} onOpenChange={setShowAddSource}>
+              <DialogContent className="sm:max-w-md">
+                <DialogTitle>Add background image</DialogTitle>
+                <DialogDescription>
+                  Upload a file or paste an image URL to use as this cover slide's background.
+                </DialogDescription>
+                <ImageDropZone
+                  onFileUpload={handleAddSourceFile}
+                  onUrlAdd={handleAddSourceUrl}
+                  isUploading={sourceUploading}
+                  onClose={() => setShowAddSource(false)}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
 
           {/* Show logo toggle */}
           {(brandLogoLightUrl || brandLogoDarkUrl || brandLogoUrl) && (

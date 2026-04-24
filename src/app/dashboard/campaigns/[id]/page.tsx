@@ -531,7 +531,9 @@ export default function CampaignDetailPage() {
   const scheduleCount = hasActiveFilter ? filteredApprovedPosts.length : approvedCount;
   const schedulePostIds = hasActiveFilter ? filteredApprovedPosts.map((p) => p.id) : null;
 
-  // Group filtered posts by date, sorted newest-first within each group
+  // Group filtered posts by date. Within each day, scheduled posts go in
+  // chronological order (next-up first); posts without a date fall back to
+  // newest-created first.
   const postsByDate = useMemo(() => {
     const groups: Record<string, Post[]> = {};
     filteredPosts.forEach((p) => {
@@ -541,9 +543,11 @@ export default function CampaignDetailPage() {
       if (!groups[dateKey]) groups[dateKey] = [];
       groups[dateKey].push(p);
     });
-    // Sort each group by createdAt descending (newest first)
     for (const key of Object.keys(groups)) {
       groups[key].sort((a, b) => {
+        if (a.scheduledDate && b.scheduledDate) {
+          return a.scheduledDate.localeCompare(b.scheduledDate);
+        }
         const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return bTime - aTime;
@@ -554,11 +558,11 @@ export default function CampaignDetailPage() {
 
   const sortedDateKeys = useMemo(() => {
     return Object.keys(postsByDate).sort((a, b) => {
-      // Unscheduled posts at the top (newest-first view)
+      // Unscheduled (no date) keeps top placement — needs attention.
       if (a === "unscheduled") return -1;
       if (b === "unscheduled") return 1;
-      // Newest dates first
-      return b.localeCompare(a);
+      // Chronological — next-up first.
+      return a.localeCompare(b);
     });
   }, [postsByDate]);
 
