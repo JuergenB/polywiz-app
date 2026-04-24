@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
-import { deleteShortLinks } from "@/lib/short-io";
+import { deleteShortLinksIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteLnkBioEntry, resolveCredentials as resolveLnkBioCredentials } from "@/lib/lnk-bio";
 import { createBrandClient } from "@/lib/late-api/client";
 
@@ -82,10 +82,13 @@ export async function POST(
       .map((p) => p.fields["Short URL"])
       .filter(Boolean);
 
-    // Delete Short.io links
+    // Delete Short.io links (skip any still referenced outside this campaign)
     if (shortUrls.length > 0) {
-      const deleted = await deleteShortLinks(shortUrls, brand);
-      console.log(`[reset] Deleted ${deleted}/${shortUrls.length} Short.io links`);
+      const excludeIds = linkedPosts.map((p) => p.id);
+      const result = await deleteShortLinksIfUnreferenced(shortUrls, excludeIds, brand);
+      console.log(
+        `[reset] Short.io: ${result.deleted} deleted, ${result.skipped} skipped (still shared) of ${result.attempted}`
+      );
     }
 
     // Delete lnk.bio entries and clear their IDs on the post records

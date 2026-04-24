@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
 import { getUserBrandAccess, hasCampaignAccess } from "@/lib/brand-access";
-import { deleteShortLinks } from "@/lib/short-io";
+import { deleteShortLinksIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteLnkBioEntry, resolveCredentials as resolveLnkBioCredentials } from "@/lib/lnk-bio";
 import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
 import type { Campaign, Post, PlatformCadenceConfig } from "@/lib/airtable/types";
@@ -304,8 +304,11 @@ export async function DELETE(
       .map((p) => p.fields["Short URL"])
       .filter(Boolean);
     if (shortUrls.length > 0) {
-      const deleted = await deleteShortLinks(shortUrls, brand);
-      console.log(`[delete] Deleted ${deleted}/${shortUrls.length} Short.io links`);
+      const excludeIds = linkedPosts.map((p) => p.id);
+      const result = await deleteShortLinksIfUnreferenced(shortUrls, excludeIds, brand);
+      console.log(
+        `[delete] Short.io: ${result.deleted} deleted, ${result.skipped} skipped (still shared) of ${result.attempted}`
+      );
     }
 
     // Clean up lnk.bio entries

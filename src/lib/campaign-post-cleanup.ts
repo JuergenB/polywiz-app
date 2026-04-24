@@ -1,5 +1,5 @@
 import { getRecord, deleteRecord, listRecords } from "@/lib/airtable/client";
-import { deleteShortLinks } from "@/lib/short-io";
+import { deleteShortLinksIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteLnkBioEntry, resolveCredentials as resolveLnkBioCredentials } from "@/lib/lnk-bio";
 import { createBrandClient } from "@/lib/late-api/client";
 import type { PostStatus } from "@/lib/airtable/types";
@@ -77,8 +77,12 @@ export async function cleanupCampaignPosts(
   const shortUrls = targetPosts.map((p) => p.fields["Short URL"]).filter(Boolean);
   let deletedShortLinks = 0;
   if (shortUrls.length > 0) {
-    deletedShortLinks = await deleteShortLinks(shortUrls, brand);
-    console.log(`[${label}] Deleted ${deletedShortLinks}/${shortUrls.length} Short.io links`);
+    const excludeIds = targetPosts.map((p) => p.id);
+    const result = await deleteShortLinksIfUnreferenced(shortUrls, excludeIds, brand);
+    deletedShortLinks = result.deleted;
+    console.log(
+      `[${label}] Short.io: ${result.deleted} deleted, ${result.skipped} skipped (still shared) of ${result.attempted}`
+    );
   }
 
   let deletedLnkBioEntries = 0;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getRecord, updateRecord, deleteRecord } from "@/lib/airtable/client";
-import { deleteShortLink } from "@/lib/short-io";
+import { deleteShortLinkIfUnreferenced } from "@/lib/short-link-deletion";
 import { deleteImage, isBlobUrl } from "@/lib/blob-storage";
 import { createBrandClient } from "@/lib/late-api/client";
 import { parseMediaItems } from "@/lib/media-items";
@@ -102,13 +102,15 @@ export async function PATCH(
         }
       }
 
-      // On dismiss, clean up Short.io link
+      // On dismiss, clean up Short.io link (skip if shared with other posts)
+      // and blank the Airtable field so a future re-approve forces a fresh link.
       if (body.status === "Dismissed" && body.shortUrl) {
         try {
-          await deleteShortLink(body.shortUrl, body.brand);
+          await deleteShortLinkIfUnreferenced(body.shortUrl, [id], body.brand);
         } catch (err) {
           console.warn(`[posts] Failed to delete short link on dismiss:`, err);
         }
+        fields["Short URL"] = "";
       }
     }
 
@@ -460,10 +462,10 @@ export async function DELETE(
       }
     }
 
-    // Clean up Short.io link
+    // Clean up Short.io link (skip if still referenced by any other post)
     if (post.fields["Short URL"]) {
       try {
-        await deleteShortLink(post.fields["Short URL"]);
+        await deleteShortLinkIfUnreferenced(post.fields["Short URL"], [id]);
       } catch (err) {
         console.warn(`[posts] Failed to delete short link on delete:`, err);
       }
