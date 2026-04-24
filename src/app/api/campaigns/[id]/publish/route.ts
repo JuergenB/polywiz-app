@@ -17,6 +17,7 @@ interface BrandFields {
   "Zernio API Key Label": string;
   "Zernio Profile ID": string;
   Timezone?: string;
+  "Outpaint Instead of Crop"?: boolean;
 }
 
 interface PostFields {
@@ -145,8 +146,9 @@ export async function POST(
         const imageUrls = postMediaItems.map((i) => i.url);
 
         // Ensure images meet platform aspect ratio requirements
+        const outpaintInsteadOfCrop = !!brandRecord.fields["Outpaint Instead of Crop"];
         for (let i = 0; i < imageUrls.length; i++) {
-          const cropped = await ensureAspectRatio(imageUrls[i], platform, post.id);
+          const cropped = await ensureAspectRatio(imageUrls[i], platform, post.id, { outpaintInsteadOfCrop });
           if (cropped !== imageUrls[i]) {
             postMediaItems[i] = { ...postMediaItems[i], url: cropped };
             imageUrls[i] = cropped;

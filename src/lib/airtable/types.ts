@@ -41,6 +41,8 @@ export interface Brand {
   lnkBioClientIdLabel?: string | null;
   /** Env var name for this brand's base64-encoded OAuth client secret (e.g., "LNKBIO_CLIENT_SECRET_B64_INTERSECT"). Falls back to LNKBIO_CLIENT_SECRET_B64. */
   lnkBioClientSecretLabel?: string | null;
+  /** When true, source images outside a platform's valid aspect range are outpainted (via Replicate Bria) to the nearest valid ratio instead of center-cropped. Preserves all original detail; costs ~$0.02–0.04/image. Editorial brands on; art brands off. */
+  outpaintInsteadOfCrop?: boolean;
   status: "Active" | "Inactive";
 }
 

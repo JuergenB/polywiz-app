@@ -35,6 +35,7 @@ interface BrandFields {
   "Lnk.Bio Group ID"?: string;
   "Lnk.Bio Client ID Label"?: string;
   "Lnk.Bio Client Secret Label"?: string;
+  "Outpaint Instead of Crop"?: boolean;
 }
 
 const PLATFORM_MAP: Record<string, string> = {
@@ -138,8 +139,9 @@ export async function POST(
     const imageUrls = postMediaItems.map((i) => i.url);
 
     // Ensure images meet platform aspect ratio requirements (e.g., Instagram max 1.91:1)
+    const outpaintInsteadOfCrop = !!brandRecord.fields["Outpaint Instead of Crop"];
     for (let i = 0; i < imageUrls.length; i++) {
-      const cropped = await ensureAspectRatio(imageUrls[i], platform, postId);
+      const cropped = await ensureAspectRatio(imageUrls[i], platform, postId, { outpaintInsteadOfCrop });
       if (cropped !== imageUrls[i]) {
         postMediaItems[i] = { ...postMediaItems[i], url: cropped };
         imageUrls[i] = cropped;

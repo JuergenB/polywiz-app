@@ -45,6 +45,7 @@ interface BrandFields {
   "Lnk.Bio Group ID"?: string;
   "Lnk.Bio Client ID Label"?: string;
   "Lnk.Bio Client Secret Label"?: string;
+  "Outpaint Instead of Crop"?: boolean;
 }
 
 /** Map Airtable platform names to Zernio platform IDs */
@@ -276,8 +277,9 @@ export async function POST(
         const imageUrls = postMediaItems.map((i) => i.url);
 
         // Ensure aspect ratios
+        const outpaintInsteadOfCrop = !!brandRecord.fields["Outpaint Instead of Crop"];
         for (let i = 0; i < imageUrls.length; i++) {
-          const cropped = await ensureAspectRatio(imageUrls[i], platform, post.id);
+          const cropped = await ensureAspectRatio(imageUrls[i], platform, post.id, { outpaintInsteadOfCrop });
           if (cropped !== imageUrls[i]) {
             postMediaItems[i] = { ...postMediaItems[i], url: cropped };
             imageUrls[i] = cropped;

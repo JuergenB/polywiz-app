@@ -1,64 +1,93 @@
 import sharp from "sharp";
 import { uploadImage } from "@/lib/blob-storage";
+import { outpaintImage } from "@/lib/replicate-outpaint";
 
 /**
- * Platform aspect ratio limits.
- * Images outside these ranges will be center-cropped to 16:9 as a fallback.
+ * Platform aspect ratio limits. If a source image is outside [min, max] we bring it into range.
+ * By default we CLAMP (center-crop to the nearest boundary), which preserves the maximum amount
+ * of source detail. When a brand opts in (Brand.outpaintInsteadOfCrop === true), we OUTPAINT via
+ * Replicate Bria to extend the narrow axis to the nearest boundary instead — zero editorial loss.
  */
 const PLATFORM_ASPECT_LIMITS: Record<string, { min: number; max: number }> = {
-  instagram: { min: 0.8, max: 1.91 },  // 4:5 portrait to ~2:1 landscape
+  instagram: { min: 0.8, max: 1.91 },
   threads: { min: 0.8, max: 1.91 },
-  // Other platforms are more permissive — add as needed
 };
 
-const FALLBACK_RATIO = 16 / 9; // 1.778
+export interface EnsureAspectRatioOptions {
+  /** When true, outpaint to the nearest valid aspect instead of center-cropping. Falls back to clamp-crop on outpaint failure. */
+  outpaintInsteadOfCrop?: boolean;
+}
 
 /**
- * Check if an image URL needs aspect ratio correction for a given platform.
- * If so, download, center-crop to 16:9, upload to Vercel Blob, and return the new URL.
- * Returns the original URL if no correction is needed.
+ * Ensure an image satisfies a platform's aspect constraints, re-upload if we had to change it, and
+ * return a URL that's safe to publish. If the source is already in range, returns the original URL.
  */
 export async function ensureAspectRatio(
   imageUrl: string,
   platform: string,
-  entityId: string
+  entityId: string,
+  opts: EnsureAspectRatioOptions = {}
 ): Promise<string> {
   const limits = PLATFORM_ASPECT_LIMITS[platform];
   if (!limits) return imageUrl;
 
   try {
-    // Download the image
     const response = await fetch(imageUrl);
     if (!response.ok) return imageUrl;
 
     const buffer = Buffer.from(await response.arrayBuffer());
     const metadata = await sharp(buffer).metadata();
-
     if (!metadata.width || !metadata.height) return imageUrl;
 
     const ratio = metadata.width / metadata.height;
-
-    // Within allowed range — no crop needed
     if (ratio >= limits.min && ratio <= limits.max) return imageUrl;
 
+    // Clamp to the nearest valid ratio (not a hardcoded 16:9). Preserves the most source detail.
+    const targetRatio = ratio < limits.min ? limits.min : limits.max;
+
+    // Opt-in path: outpaint instead of cropping, so no pixels are discarded.
+    if (opts.outpaintInsteadOfCrop) {
+      try {
+        const targetWidth =
+          ratio < limits.min
+            ? Math.round(metadata.height * targetRatio) // widen
+            : metadata.width;
+        const targetHeight =
+          ratio < limits.min
+            ? metadata.height
+            : Math.round(metadata.width / targetRatio); // heighten
+        console.log(
+          `[image-crop] ${platform}: outpainting ${metadata.width}x${metadata.height} (${ratio.toFixed(2)}) → ${targetWidth}x${targetHeight} (${targetRatio.toFixed(2)})`
+        );
+        const outpainted = await outpaintImage(
+          imageUrl,
+          targetWidth,
+          targetHeight,
+          undefined,
+          metadata.width,
+          metadata.height
+        );
+        return outpainted.url;
+      } catch (err) {
+        console.warn(`[image-crop] Outpaint failed, falling back to clamp-crop:`, err);
+        // fall through to crop
+      }
+    }
+
+    // Default path: center-crop to the nearest valid ratio.
     console.log(
-      `[image-crop] ${platform}: aspect ratio ${ratio.toFixed(2)} outside ${limits.min}-${limits.max}, cropping to 16:9`
+      `[image-crop] ${platform}: aspect ${ratio.toFixed(2)} outside [${limits.min}, ${limits.max}], clamping to ${targetRatio.toFixed(2)}`
     );
 
-    // Center-crop to 16:9
     let cropWidth: number;
     let cropHeight: number;
-
     if (ratio > limits.max) {
-      // Too wide — reduce width
       cropHeight = metadata.height;
-      cropWidth = Math.round(cropHeight * FALLBACK_RATIO);
-      // If still too wide after 16:9 crop (shouldn't happen), cap at source width
+      cropWidth = Math.round(cropHeight * targetRatio);
       if (cropWidth > metadata.width) cropWidth = metadata.width;
     } else {
-      // Too tall — reduce height
       cropWidth = metadata.width;
-      cropHeight = Math.round(cropWidth / FALLBACK_RATIO);
+      cropHeight = Math.round(cropWidth / targetRatio);
       if (cropHeight > metadata.height) cropHeight = metadata.height;
     }
 
@@ -76,9 +105,7 @@ export async function ensureAspectRatio(
       `[image-crop] Cropped: ${metadata.width}x${metadata.height} → ${cropWidth}x${cropHeight} (${(cropped.length / 1024).toFixed(0)}KB)`
     );
 
-    // Upload cropped image to Vercel Blob
-    const newUrl = await uploadImage("posts", entityId, cropped, "image/jpeg");
-    return newUrl;
+    return await uploadImage("posts", entityId, cropped, "image/jpeg");
   } catch (err) {
     console.warn("[image-crop] Failed, using original:", err);
     return imageUrl;

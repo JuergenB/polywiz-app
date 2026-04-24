@@ -41,7 +41,7 @@ export function CarouselPreviewOverlay({
         <div className="flex items-center gap-2 min-w-0">
           <Layers className="h-4 w-4 text-white/70 shrink-0" />
           <span className="text-white font-medium text-sm truncate">
-            {previews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : "4:5"})
+            {previews.length} slides ({platformLower === "linkedin" || platformLower === "bluesky" ? "1:1" : platformLower === "threads" ? "3:4" : "4:5"})
           </span>
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
@@ -108,15 +108,18 @@ export function CarouselPreviewOverlay({
         </div>
       )}
 
-      {/* Slides */}
-      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden px-4 py-3 carousel-dark-scroll">
-        <div className="flex gap-4 h-full items-center">
+      {/* Slides — one per viewport page, scroll-snap to center each one */}
+      <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden py-3 carousel-dark-scroll snap-x snap-mandatory">
+        <div className="flex h-full">
           {previews.map((slide, idx) => {
-            const ar = platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : "4/5";
+            const ar = platformLower === "linkedin" || platformLower === "bluesky" ? "1/1" : platformLower === "threads" ? "3/4" : "4/5";
             return (
-              <div key={idx} className="shrink-0 flex flex-col items-center gap-1.5 h-full">
+              <div
+                key={idx}
+                className="shrink-0 snap-center w-full h-full flex flex-col items-center justify-center gap-1.5 px-4"
+              >
                 <div
-                  className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40 h-[calc(100%-24px)]"
+                  className="relative rounded-lg overflow-hidden shadow-2xl border border-zinc-600/40 h-[calc(100%-24px)] max-w-full"
                   style={{ aspectRatio: ar }}
                 >
                   <img
